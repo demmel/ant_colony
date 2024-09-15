@@ -5,7 +5,9 @@ mod food;
 mod nest;
 mod track;
 
-use ant::{spawn_ant, update_ant_holding_food, update_ants};
+use ant::{
+    decay_satiation, eat_held_food, spawn_ant, starve, update_ant_holding_food, update_ants,
+};
 use assets::{Colors, Meshes};
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
@@ -42,7 +44,10 @@ fn main() {
             Update,
             (
                 (
-                    decay_tracks,
+                    (
+                        decay_tracks,
+                        ((decay_satiation, eat_held_food), starve).chain(),
+                    ),
                     (update_ants, (update_ant_holding_food, update_food_size)).chain(),
                 )
                     .chain(),

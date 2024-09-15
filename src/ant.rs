@@ -11,8 +11,37 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct Ant {
-    satiation: f32,
+pub struct Ant;
+
+#[derive(Component)]
+pub struct Satiation(f32);
+
+impl Satiation {
+    pub fn amount(&self) -> f32 {
+        self.0
+    }
+
+    pub fn add(&mut self, amount: f32) -> f32 {
+        let added = (1.0 - self.0).min(amount);
+        self.0 += added;
+        if (1.0 - self.0) < 0.0001 {
+            self.0 = 1.0;
+        }
+        added
+    }
+
+    pub fn remove(&mut self, amount: f32) -> f32 {
+        let removed = self.0.min(amount);
+        self.0 -= removed;
+        if self.0 < 0.0001 {
+            self.0 = 0.0;
+        }
+        removed
+    }
+
+    pub fn empty(&self) -> bool {
+        self.0 <= 0.0
+    }
 }
 
 #[derive(Component)]
@@ -59,7 +88,8 @@ pub fn spawn_ant(
 ) -> Entity {
     commands
         .spawn((
-            Ant { satiation: 1.0 },
+            Ant,
+            Satiation(1.0),
             HeldFood(0.0),
             SpatialBundle::from_transform(
                 Transform::from_translation(Vec3::new(x, y, LAYER_ANT))
@@ -119,12 +149,33 @@ pub fn spawn_ant(
         .id()
 }
 
+pub fn decay_satiation(time: Res<Time>, mut satiations: Query<&mut Satiation>) {
+    for mut satiation in satiations.iter_mut() {
+        satiation.remove(0.01 * time.delta_seconds());
+    }
+}
+
+pub fn eat_held_food(time: Res<Time>, mut eaters: Query<(&mut HeldFood, &mut Satiation)>) {
+    for (mut held_food, mut satiation) in eaters.iter_mut() {
+        let eats = held_food.remove((1.0 - satiation.amount()) * 0.1 * time.delta_seconds());
+        satiation.add(eats);
+    }
+}
+
+pub fn starve(mut commands: Commands, satiations: Query<(Entity, &Satiation)>) {
+    for (entity, satiation) in satiations.iter() {
+        if satiation.empty() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+}
+
 pub fn update_ants(
     mut commands: Commands,
     time: Res<Time>,
     meshes: Res<Meshes>,
     colors: Res<Colors>,
-    mut ants: Query<(Entity, &mut Ant, &mut Transform, &mut HeldFood)>,
+    mut ants: Query<(&mut Transform, &mut HeldFood), With<Ant>>,
     mut tracks: Query<(Entity, &mut Track, &Transform), Without<Ant>>,
     mut food: Query<(Entity, &mut Food, &Transform), (Without<Ant>, Without<Track>)>,
     mut nests: Query<
@@ -143,15 +194,7 @@ pub fn update_ants(
             .unwrap();
     }
 
-    for (ant_entity, mut ant, mut ant_transform, mut held_food) in ants.iter_mut() {
-        ant.satiation -= 0.01 * time.delta_seconds();
-        let eats = held_food.remove((1.0 - ant.satiation) * 0.1 * time.delta_seconds());
-        ant.satiation += eats;
-        if ant.satiation < 0.0 {
-            commands.entity(ant_entity).despawn_recursive();
-            continue;
-        }
-
+    for (mut ant_transform, mut held_food) in ants.iter_mut() {
         let forward = ant_transform.up();
         ant_transform.translation += forward * ANT_SPEED * time.delta_seconds();
 
