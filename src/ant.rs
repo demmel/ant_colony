@@ -1,5 +1,4 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
-use kdtree::{distance::squared_euclidean, KdTree};
 use rand::prelude::*;
 
 use crate::{
@@ -7,6 +6,7 @@ use crate::{
     config::*,
     food::{spawn_food, Food},
     nest::Nest,
+    position_index::TrackPositionIndex,
     track::{spawn_track, Track, TrackKind},
 };
 
@@ -175,24 +175,15 @@ pub fn update_ants(
     time: Res<Time>,
     meshes: Res<Meshes>,
     colors: Res<Colors>,
+    track_position_index: Res<TrackPositionIndex>,
     mut ants: Query<(&mut Transform, &mut HeldFood), With<Ant>>,
-    mut tracks: Query<(Entity, &mut Track, &Transform), Without<Ant>>,
-    mut food: Query<(Entity, &mut Food, &Transform), (Without<Ant>, Without<Track>)>,
-    mut nests: Query<
-        (&mut Nest, &Transform),
-        (With<Nest>, Without<Ant>, Without<Track>, Without<Food>),
-    >,
+    mut tracks: Query<(&mut Track, &Transform), Without<Ant>>,
+    mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
+    mut nests: Query<(&mut Nest, &Transform), Without<Ant>>,
 ) {
     let mut rng = rand::thread_rng();
 
     let (mut nest, nest_transform) = nests.single_mut();
-
-    let mut track_lookup = KdTree::new(2);
-    for (id, _, transform) in tracks.iter() {
-        track_lookup
-            .add([transform.translation.x, transform.translation.y], id)
-            .unwrap();
-    }
 
     for (mut ant_transform, mut held_food) in ants.iter_mut() {
         let forward = ant_transform.up();
@@ -212,13 +203,8 @@ pub fn update_ants(
             ant_transform.translation.y = WORLD_HEIGHT / 2.0 - min_distance_from_edge;
         }
 
-        let nearby_tracks = track_lookup
-            .within(
-                &[ant_transform.translation.x, ant_transform.translation.y],
-                ANT_SENSE_RADIUS.powf(2.0),
-                &squared_euclidean,
-            )
-            .unwrap();
+        let nearby_tracks =
+            track_position_index.within(ant_transform.translation.xy(), ANT_SENSE_RADIUS);
 
         let mut nearby_food = food.iter_mut().find(|(_, _, transform)| {
             transform
@@ -289,9 +275,9 @@ pub fn update_ants(
             }
         } else {
             nearby_tracks
-                .iter()
+                .clone()
                 .map(|(_, id)| {
-                    let (_, track, track_transform) = tracks.get(**id).unwrap();
+                    let (track, track_transform) = tracks.get(*id).unwrap();
 
                     let multiplier = match (&track.kind, !held_food.empty()) {
                         (TrackKind::Nest, false) => -0.1,
@@ -337,8 +323,8 @@ pub fn update_ants(
         let mult = rng.gen_range(0.5..1.0);
         ant_transform.rotation *= Quat::from_rotation_z(angle * mult);
 
-        let nearest_track = nearby_tracks.iter().find(|(_, id)| {
-            let (_, track, track_transform) = tracks.get(**id).unwrap();
+        let nearest_track = nearby_tracks.clone().find(|(distance, id)| {
+            let (track, _) = tracks.get(**id).unwrap();
             match (&track.kind, !held_food.empty()) {
                 (TrackKind::Nest, false) => {}
                 (TrackKind::Nest, true) => {
@@ -349,15 +335,11 @@ pub fn update_ants(
                 }
                 (TrackKind::Food, true) => {}
             };
-            track_transform
-                .translation
-                .xy()
-                .distance(ant_transform.translation.xy())
-                < TRACK_RADIUS * 2.0
+            *distance < TRACK_RADIUS * 2.0
         });
 
         if let Some((_, id)) = nearest_track {
-            let (_, mut track, _) = tracks.get_mut(**id).unwrap();
+            let (mut track, _) = tracks.get_mut(*id).unwrap();
             track.concentration += ANT_TRACK_CONCENTRATION * time.delta_seconds();
             track.concentration = track.concentration.min(1.0);
         } else {
