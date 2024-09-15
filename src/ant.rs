@@ -12,8 +12,38 @@ use crate::{
 
 #[derive(Component)]
 pub struct Ant {
-    food: f32,
     satiation: f32,
+}
+
+#[derive(Component)]
+pub struct HeldFood(f32);
+
+impl HeldFood {
+    pub fn empty(&self) -> bool {
+        self.0 <= 0.0
+    }
+
+    pub fn amount(&self) -> f32 {
+        self.0
+    }
+
+    pub fn add(&mut self, amount: f32) -> f32 {
+        let added = (1.0 - self.0).min(amount);
+        self.0 += added;
+        if (1.0 - self.0) < 0.0001 {
+            self.0 = 1.0;
+        }
+        added
+    }
+
+    pub fn remove(&mut self, amount: f32) -> f32 {
+        let removed = self.0.min(amount);
+        self.0 -= removed;
+        if self.0 < 0.0001 {
+            self.0 = 0.0;
+        }
+        removed
+    }
 }
 
 #[derive(Component)]
@@ -29,10 +59,8 @@ pub fn spawn_ant(
 ) -> Entity {
     commands
         .spawn((
-            Ant {
-                food: 0.0,
-                satiation: 1.0,
-            },
+            Ant { satiation: 1.0 },
+            HeldFood(0.0),
             SpatialBundle::from_transform(
                 Transform::from_translation(Vec3::new(x, y, LAYER_ANT))
                     .mul_transform(Transform::from_rotation(Quat::from_rotation_z(rotation))),
@@ -96,7 +124,7 @@ pub fn update_ants(
     time: Res<Time>,
     meshes: Res<Meshes>,
     colors: Res<Colors>,
-    mut ants: Query<(Entity, &mut Ant, &mut Transform)>,
+    mut ants: Query<(Entity, &mut Ant, &mut Transform, &mut HeldFood)>,
     mut tracks: Query<(Entity, &mut Track, &Transform), Without<Ant>>,
     mut food: Query<(Entity, &mut Food, &Transform), (Without<Ant>, Without<Track>)>,
     mut nests: Query<
@@ -115,16 +143,10 @@ pub fn update_ants(
             .unwrap();
     }
 
-    for (ant_entity, mut ant, mut ant_transform) in ants.iter_mut() {
+    for (ant_entity, mut ant, mut ant_transform, mut held_food) in ants.iter_mut() {
         ant.satiation -= 0.01 * time.delta_seconds();
-        if ant.food > 0.0 {
-            let eats = ((1.0 - ant.satiation) * 0.1 * time.delta_seconds()).min(ant.food);
-            ant.satiation += eats;
-            ant.food -= eats;
-            if ant.food < 0.0001 {
-                ant.food = 0.0;
-            }
-        }
+        let eats = held_food.remove((1.0 - ant.satiation) * 0.1 * time.delta_seconds());
+        ant.satiation += eats;
         if ant.satiation < 0.0 {
             commands.entity(ant_entity).despawn_recursive();
             continue;
@@ -168,9 +190,10 @@ pub fn update_ants(
             .xy()
             .distance(nest_transform.translation.xy());
 
-        if ant.food > 0.0 && nest_distance < 10.0 {
-            nest.food += ant.food;
-            ant.food = 0.0;
+        if !held_food.empty() && nest_distance < 10.0 {
+            let amount = held_food.amount();
+            nest.food += amount;
+            held_food.remove(amount);
             if nest.food >= 1.0 {
                 spawn_ant(
                     &mut commands,
@@ -183,15 +206,15 @@ pub fn update_ants(
                 nest.food -= 1.0;
             }
         } else if let Some((entity, mut food, food_transform)) = nearby_food {
-            if ant.food <= 0.0
+            if held_food.empty()
                 && food_transform
                     .translation
                     .xy()
                     .distance(ant_transform.translation.xy())
                     < ANT_SEGMENT_RADIUS
             {
-                food.amount -= 1.0;
-                ant.food += 1.0;
+                let took = held_food.add(food.amount);
+                food.amount -= took;
                 if food.amount <= 0.0 {
                     commands.entity(entity).despawn();
                     spawn_food(
@@ -211,12 +234,12 @@ pub fn update_ants(
             }
         }
 
-        let mut direction = if ant.food > 0.0 && nest_distance < ANT_SENSE_RADIUS + 10.0 {
+        let mut direction = if !held_food.empty() && nest_distance < ANT_SENSE_RADIUS + 10.0 {
             nest_transform.translation.xy() - ant_transform.translation.xy()
-        } else if ant.food <= 0.0 && nest_distance < ANT_SENSE_RADIUS + 10.0 {
+        } else if held_food.empty() && nest_distance < ANT_SENSE_RADIUS + 10.0 {
             ant_transform.translation.xy() - nest_transform.translation.xy()
         } else if let Some((_, _, food_transform)) = nearby_food {
-            if ant.food > 0.0 {
+            if !held_food.empty() {
                 ant_transform.translation.xy() - food_transform.translation.xy()
             } else {
                 food_transform.translation.xy() - ant_transform.translation.xy()
@@ -227,7 +250,7 @@ pub fn update_ants(
                 .map(|(_, id)| {
                     let (_, track, track_transform) = tracks.get(**id).unwrap();
 
-                    let multiplier = match (&track.kind, ant.food > 0.0) {
+                    let multiplier = match (&track.kind, !held_food.empty()) {
                         (TrackKind::Nest, false) => -0.1,
                         (TrackKind::Nest, true) => 1.0,
                         (TrackKind::Food, false) => 1.0,
@@ -273,7 +296,7 @@ pub fn update_ants(
 
         let nearest_track = nearby_tracks.iter().find(|(_, id)| {
             let (_, track, track_transform) = tracks.get(**id).unwrap();
-            match (&track.kind, ant.food > 0.0) {
+            match (&track.kind, !held_food.empty()) {
                 (TrackKind::Nest, false) => {}
                 (TrackKind::Nest, true) => {
                     return false;
@@ -305,7 +328,7 @@ pub fn update_ants(
                     LAYER_TRACK,
                 ),
                 ANT_TRACK_CONCENTRATION * time.delta_seconds(),
-                if ant.food > 0.0 {
+                if !held_food.empty() {
                     TrackKind::Food
                 } else {
                     TrackKind::Nest
@@ -316,13 +339,13 @@ pub fn update_ants(
 }
 
 pub fn update_ant_holding_food(
-    ants: Query<(&Ant, &Children), Changed<Ant>>,
-    mut carried_food: Query<(Entity, &CarriedFood, &mut Visibility)>,
+    held_food_query: Query<(&HeldFood, &Children), Changed<HeldFood>>,
+    mut carried_food_query: Query<(Entity, &CarriedFood, &mut Visibility)>,
 ) {
-    for (ant, children) in ants.iter() {
+    for (held_food, children) in held_food_query.iter() {
         for child in children.iter() {
-            if let Ok((_, _, mut visibility)) = carried_food.get_mut(*child) {
-                *visibility = if ant.food > 0.0 {
+            if let Ok((_, _, mut visibility)) = carried_food_query.get_mut(*child) {
+                *visibility = if !held_food.empty() {
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
