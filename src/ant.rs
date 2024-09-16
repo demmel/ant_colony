@@ -170,43 +170,45 @@ pub fn starve(mut commands: Commands, satiations: Query<(Entity, &Satiation)>) {
     }
 }
 
-pub fn update_ants(
-    mut commands: Commands,
+pub fn walk_ants(time: Res<Time>, mut ants: Query<&mut Transform, With<Ant>>) {
+    let min_distance_from_edge = ANT_SEGMENT_RADIUS * 2.0 * 1.5;
+
+    for mut transform in ants.iter_mut() {
+        let forward = transform.up();
+        transform.translation += forward * ANT_SPEED * time.delta_seconds();
+
+        if transform.translation.x < -WORLD_WIDTH / 2.0 + min_distance_from_edge {
+            transform.translation.x = -WORLD_WIDTH / 2.0 + min_distance_from_edge;
+        } else if transform.translation.x > WORLD_WIDTH / 2.0 - min_distance_from_edge {
+            transform.translation.x = WORLD_WIDTH / 2.0 - min_distance_from_edge;
+        }
+
+        if transform.translation.y < -WORLD_HEIGHT / 2.0 + min_distance_from_edge {
+            transform.translation.y = -WORLD_HEIGHT / 2.0 + min_distance_from_edge;
+        } else if transform.translation.y > WORLD_HEIGHT / 2.0 - min_distance_from_edge {
+            transform.translation.y = WORLD_HEIGHT / 2.0 - min_distance_from_edge;
+        }
+    }
+}
+
+pub fn rotate_ants(
     time: Res<Time>,
-    meshes: Res<Meshes>,
-    colors: Res<Colors>,
     track_position_index: Res<TrackPositionIndex>,
-    mut ants: Query<(&mut Transform, &mut HeldFood), With<Ant>>,
-    mut tracks: Query<(&mut Track, &Transform), Without<Ant>>,
+    mut ants: Query<(&mut Transform, &HeldFood), With<Ant>>,
+    tracks: Query<(&Track, &Transform), Without<Ant>>,
     mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
-    mut nests: Query<(&mut Nest, &Transform), Without<Ant>>,
+    nests: Query<&Transform, (With<Nest>, Without<Ant>)>,
 ) {
     let mut rng = rand::thread_rng();
+    let nest_transform = nests.single();
 
-    let (mut nest, nest_transform) = nests.single_mut();
-
-    for (mut ant_transform, mut held_food) in ants.iter_mut() {
+    for (mut ant_transform, held_food) in ants.iter_mut() {
         let forward = ant_transform.up();
-        ant_transform.translation += forward * ANT_SPEED * time.delta_seconds();
-
-        let min_distance_from_edge = ANT_SEGMENT_RADIUS * 2.0 * 1.5;
-
-        if ant_transform.translation.x < -WORLD_WIDTH / 2.0 + min_distance_from_edge {
-            ant_transform.translation.x = -WORLD_WIDTH / 2.0 + min_distance_from_edge;
-        } else if ant_transform.translation.x > WORLD_WIDTH / 2.0 - min_distance_from_edge {
-            ant_transform.translation.x = WORLD_WIDTH / 2.0 - min_distance_from_edge;
-        }
-
-        if ant_transform.translation.y < -WORLD_HEIGHT / 2.0 + min_distance_from_edge {
-            ant_transform.translation.y = -WORLD_HEIGHT / 2.0 + min_distance_from_edge;
-        } else if ant_transform.translation.y > WORLD_HEIGHT / 2.0 - min_distance_from_edge {
-            ant_transform.translation.y = WORLD_HEIGHT / 2.0 - min_distance_from_edge;
-        }
 
         let nearby_tracks =
             track_position_index.within(ant_transform.translation.xy(), ANT_SENSE_RADIUS);
 
-        let mut nearby_food = food.iter_mut().find(|(_, _, transform)| {
+        let nearby_food = food.iter_mut().find(|(_, _, transform)| {
             transform
                 .translation
                 .xy()
@@ -218,50 +220,6 @@ pub fn update_ants(
             .translation
             .xy()
             .distance(nest_transform.translation.xy());
-
-        if !held_food.empty() && nest_distance < 10.0 {
-            let amount = held_food.amount();
-            nest.food += amount;
-            held_food.remove(amount);
-            if nest.food >= 1.0 {
-                spawn_ant(
-                    &mut commands,
-                    &meshes,
-                    &colors,
-                    ant_transform.translation.x,
-                    ant_transform.translation.y,
-                    rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI),
-                );
-                nest.food -= 1.0;
-            }
-        } else if let Some((entity, mut food, food_transform)) = nearby_food {
-            if held_food.empty()
-                && food_transform
-                    .translation
-                    .xy()
-                    .distance(ant_transform.translation.xy())
-                    < ANT_SEGMENT_RADIUS
-            {
-                let took = held_food.add(food.amount);
-                food.amount -= took;
-                if food.amount <= 0.0 {
-                    commands.entity(entity).despawn();
-                    spawn_food(
-                        &mut commands,
-                        &meshes,
-                        &colors,
-                        rng.gen_range(-WORLD_WIDTH / 2.0..WORLD_WIDTH / 2.0),
-                        rng.gen_range(-WORLD_HEIGHT / 2.0..WORLD_HEIGHT / 2.0),
-                        rng.gen_range(10.0..100.0),
-                    );
-                    nearby_food = None;
-                } else {
-                    nearby_food = Some((entity, food, food_transform));
-                }
-            } else {
-                nearby_food = Some((entity, food, food_transform));
-            }
-        }
 
         let mut direction = if !held_food.empty() && nest_distance < ANT_SENSE_RADIUS + 10.0 {
             nest_transform.translation.xy() - ant_transform.translation.xy()
@@ -322,6 +280,21 @@ pub fn update_ants(
         let angle = angle.clamp(-max_turn, max_turn);
         let mult = rng.gen_range(0.5..1.0);
         ant_transform.rotation *= Quat::from_rotation_z(angle * mult);
+    }
+}
+
+pub fn emit_pheromones(
+    mut commands: Commands,
+    time: Res<Time>,
+    meshes: Res<Meshes>,
+    colors: Res<Colors>,
+    track_position_index: Res<TrackPositionIndex>,
+    ants: Query<(&Transform, &HeldFood), With<Ant>>,
+    mut tracks: Query<(&mut Track, &Transform), Without<Ant>>,
+) {
+    for (ant_transform, held_food) in ants.iter() {
+        let nearby_tracks =
+            track_position_index.within(ant_transform.translation.xy(), ANT_SENSE_RADIUS);
 
         let nearest_track = nearby_tracks.clone().find(|(distance, id)| {
             let (track, _) = tracks.get(**id).unwrap();
@@ -359,6 +332,93 @@ pub fn update_ants(
                     TrackKind::Nest
                 },
             );
+        }
+    }
+}
+
+pub fn pick_up_food(
+    mut commands: Commands,
+    meshes: Res<Meshes>,
+    colors: Res<Colors>,
+    mut ants: Query<(&Transform, &mut HeldFood), With<Ant>>,
+    mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
+) {
+    let mut rng = rand::thread_rng();
+
+    for (ant_transform, mut held_food) in ants.iter_mut() {
+        if !held_food.empty() {
+            continue;
+        }
+
+        let nearby_food = food.iter_mut().find(|(_, _, transform)| {
+            transform
+                .translation
+                .xy()
+                .distance(ant_transform.translation.xy())
+                < ANT_SENSE_RADIUS
+        });
+
+        if let Some((entity, mut food, food_transform)) = nearby_food {
+            if food_transform
+                .translation
+                .xy()
+                .distance(ant_transform.translation.xy())
+                < ANT_SEGMENT_RADIUS
+            {
+                let took = held_food.add(food.amount);
+                food.amount -= took;
+                if food.amount <= 0.0 {
+                    commands.entity(entity).despawn();
+                    spawn_food(
+                        &mut commands,
+                        &meshes,
+                        &colors,
+                        rng.gen_range(-WORLD_WIDTH / 2.0..WORLD_WIDTH / 2.0),
+                        rng.gen_range(-WORLD_HEIGHT / 2.0..WORLD_HEIGHT / 2.0),
+                        rng.gen_range(10.0..100.0),
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub fn deposit_food(
+    mut commands: Commands,
+    meshes: Res<Meshes>,
+    colors: Res<Colors>,
+    mut ants: Query<(&Transform, &mut HeldFood), With<Ant>>,
+    mut nests: Query<(&mut Nest, &Transform), Without<Ant>>,
+) {
+    let mut rng: ThreadRng = rand::thread_rng();
+
+    let (mut nest, nest_transform) = nests.single_mut();
+
+    for (ant_transform, mut held_food) in ants.iter_mut() {
+        if held_food.empty() {
+            continue;
+        }
+
+        let nest_distance = ant_transform
+            .translation
+            .xy()
+            .distance(nest_transform.translation.xy());
+
+        if nest_distance < 10.0 {
+            let amount = held_food.amount();
+            nest.food += amount;
+            held_food.remove(amount);
+            if nest.food >= 1.0 {
+                spawn_ant(
+                    &mut commands,
+                    &meshes,
+                    &colors,
+                    ant_transform.translation.x,
+                    ant_transform.translation.y,
+                    rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI),
+                );
+                nest.food -= 1.0;
+            }
         }
     }
 }

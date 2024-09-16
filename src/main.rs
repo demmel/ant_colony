@@ -7,7 +7,8 @@ mod position_index;
 mod track;
 
 use ant::{
-    decay_satiation, eat_held_food, spawn_ant, starve, update_ant_holding_food, update_ants,
+    decay_satiation, deposit_food, eat_held_food, emit_pheromones, pick_up_food, rotate_ants,
+    spawn_ant, starve, update_ant_holding_food, walk_ants,
 };
 use assets::{Colors, Meshes};
 use bevy::{
@@ -51,7 +52,12 @@ fn main() {
                         (decay_tracks, compute_track_position_index).chain(),
                         ((decay_satiation, eat_held_food), starve).chain(),
                     ),
-                    (update_ants, (update_ant_holding_food, update_food_size)).chain(),
+                    (
+                        walk_ants,
+                        (deposit_food, pick_up_food, emit_pheromones),
+                        (rotate_ants, update_ant_holding_food, update_food_size),
+                    )
+                        .chain(),
                 )
                     .chain(),
                 exit,
