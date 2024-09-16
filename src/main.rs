@@ -103,10 +103,10 @@ fn setup(mut commands: Commands, meshes: Res<Meshes>, colors: Res<Colors>) {
         spawn_ant(&mut commands, &meshes, &colors, x, y, rotation);
     }
 
-    for _ in 0..10 {
+    for _ in 0..100 {
         let x = rng.gen_range(-config::WORLD_WIDTH / 2.0..config::WORLD_WIDTH / 2.0);
         let y = rng.gen_range(-config::WORLD_HEIGHT / 2.0..config::WORLD_HEIGHT / 2.0);
-        let amount = rng.gen_range(10.0..100.0);
+        let amount = rng.gen_range(50.0..250.0);
         spawn_food(&mut commands, &meshes, &colors, x, y, amount);
     }
 

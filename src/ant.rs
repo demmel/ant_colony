@@ -195,66 +195,69 @@ pub fn rotate_ants(
     time: Res<Time>,
     track_position_index: Res<TrackPositionIndex>,
     mut ants: Query<(&mut Transform, &HeldFood), With<Ant>>,
-    tracks: Query<(&Track, &Transform), Without<Ant>>,
-    mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
+    tracks: Query<&Track>,
+    food: Query<(Entity, &Food, &Transform), Without<Ant>>,
     nests: Query<&Transform, (With<Nest>, Without<Ant>)>,
 ) {
     let mut rng = rand::thread_rng();
     let nest_transform = nests.single();
 
+    let sense_offsets = [
+        Vec3::Y * ANT_SENSE_DISTANCE,
+        Quat::from_rotation_z(std::f32::consts::PI / 8.0).mul_vec3(Vec3::Y) * ANT_SENSE_DISTANCE,
+        Quat::from_rotation_z(-std::f32::consts::PI / 8.0).mul_vec3(Vec3::Y) * ANT_SENSE_DISTANCE,
+    ];
+
     for (mut ant_transform, held_food) in ants.iter_mut() {
         let forward = ant_transform.up();
 
-        let nearby_tracks =
-            track_position_index.within(ant_transform.translation.xy(), ANT_SENSE_RADIUS);
+        let mut direction: Vec2 = sense_offsets
+            .iter()
+            .map(|sense_offset| {
+                let sense_offset = ant_transform.rotation.mul_vec3(*sense_offset).xy();
+                let sense_center = ant_transform.translation.xy() + sense_offset;
 
-        let nearby_food = food.iter_mut().find(|(_, _, transform)| {
-            transform
-                .translation
-                .xy()
-                .distance(ant_transform.translation.xy())
-                < ANT_SENSE_RADIUS
-        });
+                let sensed_tracks = track_position_index.within(sense_center, ANT_SENSE_RADIUS);
 
-        let nest_distance = ant_transform
-            .translation
-            .xy()
-            .distance(nest_transform.translation.xy());
+                let sensed_food = food.iter().find(|(_, _, food_transform)| {
+                    food_transform.translation.xy().distance(sense_center) < ANT_SENSE_RADIUS
+                });
 
-        let mut direction = if !held_food.empty() && nest_distance < ANT_SENSE_RADIUS + 10.0 {
-            nest_transform.translation.xy() - ant_transform.translation.xy()
-        } else if held_food.empty() && nest_distance < ANT_SENSE_RADIUS + 10.0 {
-            ant_transform.translation.xy() - nest_transform.translation.xy()
-        } else if let Some((_, _, food_transform)) = nearby_food {
-            if !held_food.empty() {
-                ant_transform.translation.xy() - food_transform.translation.xy()
-            } else {
-                food_transform.translation.xy() - ant_transform.translation.xy()
-            }
-        } else {
-            nearby_tracks
-                .clone()
-                .map(|(_, id)| {
-                    let (track, track_transform) = tracks.get(*id).unwrap();
+                let sensed_nest =
+                    nest_transform.translation.xy().distance(sense_center) < ANT_SENSE_RADIUS;
 
-                    let multiplier = match (&track.kind, !held_food.empty()) {
-                        (TrackKind::Nest, false) => -0.1,
-                        (TrackKind::Nest, true) => 1.0,
-                        (TrackKind::Food, false) => 1.0,
-                        (TrackKind::Food, true) => -0.1,
-                    };
-
-                    let direction =
-                        track_transform.translation.xy() - ant_transform.translation.xy();
-                    let direction = if direction.length() > 0.0001 {
-                        direction.normalize()
+                let weight = if !held_food.empty() && sensed_nest {
+                    10.0f32
+                } else if held_food.empty() && sensed_nest {
+                    0.0
+                } else if let Some((_, _, _)) = sensed_food {
+                    if !held_food.empty() {
+                        0.0
                     } else {
-                        Vec2::ZERO
-                    };
-                    direction * track.concentration * multiplier
-                })
-                .fold(Vec2::ZERO, |acc, direction| acc + direction)
-        };
+                        10.0
+                    }
+                } else {
+                    rng.gen_range(0.0..0.1)
+                        + sensed_tracks
+                            .map(|(_, id)| {
+                                let track = tracks.get(*id).unwrap();
+
+                                let multiplier = match (&track.kind, !held_food.empty()) {
+                                    (TrackKind::Nest, false) => 0.0,
+                                    (TrackKind::Nest, true) => 1.0,
+                                    (TrackKind::Food, false) => 1.0,
+                                    (TrackKind::Food, true) => 0.0,
+                                };
+
+                                track.concentration * multiplier
+                            })
+                            .sum::<f32>()
+                };
+
+                weight.max(0.01) * (sense_center - ant_transform.translation.xy())
+            })
+            .sum::<Vec2>()
+            .normalize();
 
         if ant_transform.translation.x < -WORLD_WIDTH / 2.0 + ANT_SENSE_RADIUS {
             direction += Vec2::new(10.0, 0.0);
@@ -278,8 +281,8 @@ pub fn rotate_ants(
 
         let max_turn = ANT_ROTATION_SPEED * time.delta_seconds();
         let angle = angle.clamp(-max_turn, max_turn);
-        let mult = rng.gen_range(0.5..1.0);
-        ant_transform.rotation *= Quat::from_rotation_z(angle * mult);
+
+        ant_transform.rotation *= Quat::from_rotation_z(angle);
     }
 }
 
@@ -320,11 +323,7 @@ pub fn emit_pheromones(
                 &mut commands,
                 &meshes,
                 &colors,
-                Transform::from_xyz(
-                    ant_transform.translation.x,
-                    ant_transform.translation.y,
-                    LAYER_TRACK,
-                ),
+                ant_transform.translation.xy(),
                 ANT_TRACK_CONCENTRATION * time.delta_seconds(),
                 if !held_food.empty() {
                     TrackKind::Food

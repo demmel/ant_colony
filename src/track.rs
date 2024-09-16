@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use crate::{
     assets::{Colors, Meshes},
-    config,
+    config::{self, LAYER_TRACK},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -21,7 +21,7 @@ pub fn spawn_track(
     commands: &mut Commands,
     meshes: &Res<Meshes>,
     colors: &Res<Colors>,
-    track_transform: Transform,
+    position: Vec2,
     concentration: f32,
     kind: TrackKind,
 ) {
@@ -33,7 +33,15 @@ pub fn spawn_track(
                 TrackKind::Nest => colors.nest_tracks[color_index].clone(),
                 TrackKind::Food => colors.food_tracks[color_index].clone(),
             },
-            transform: track_transform,
+            transform: Transform::from_xyz(
+                position.x,
+                position.y,
+                LAYER_TRACK
+                    + match kind {
+                        TrackKind::Nest => 0.0,
+                        TrackKind::Food => 0.1,
+                    },
+            ),
             ..Default::default()
         },
         Track {

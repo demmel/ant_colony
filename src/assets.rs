@@ -54,10 +54,10 @@ impl FromWorld for Colors {
             nest: colors.add(NEST_COLOR),
             food: colors.add(FOOD_COLOR),
             nest_tracks: (0..=100)
-                .map(|a| colors.add(NEST_TRACK_COLOR.with_alpha(a as f32 / 100.0)))
+                .map(|a| colors.add(NEST_TRACK_COLOR.with_alpha(0.5 * a as f32 / 100.0)))
                 .collect(),
             food_tracks: (0..=100)
-                .map(|a| colors.add(FOOD_TRACK_COLOR.with_alpha(a as f32 / 100.0)))
+                .map(|a| colors.add(FOOD_TRACK_COLOR.with_alpha(0.5 * a as f32 / 100.0)))
                 .collect(),
         }
     }
