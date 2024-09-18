@@ -18,7 +18,7 @@ use bevy::{
     sprite::MaterialMesh2dBundle,
     window::WindowMode::BorderlessFullscreen,
 };
-use config::LAYER_DIRT;
+use config::{LAYER_DIRT, TICKS_PER_SECOND, TICK_RATE_MULTIPLIER};
 use food::{spawn_random_food, update_food_size};
 use nest::{spawn_ants_from_nest, spawn_nest};
 use position_index::{compute_track_position_index, TrackPositionIndex};
@@ -40,6 +40,9 @@ fn main() {
             FrameTimeDiagnosticsPlugin,
         ))
         .insert_resource(ClearColor(config::CLEAR_COLOR))
+        .insert_resource(Time::<Fixed>::from_hz(
+            TICKS_PER_SECOND * TICK_RATE_MULTIPLIER,
+        ))
         .init_resource::<Meshes>()
         .init_resource::<Colors>()
         .init_resource::<TrackPositionIndex>()

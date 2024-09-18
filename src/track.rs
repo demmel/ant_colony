@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use crate::{
     assets::{Colors, Meshes},
-    config::{self, LAYER_TRACK},
+    config::{self, FIXED_DELTA_TIME, LAYER_TRACK},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -53,12 +53,11 @@ pub fn spawn_track(
 
 pub fn decay_tracks(
     mut commands: Commands,
-    time: Res<Time>,
     colors: Res<Colors>,
     mut tracks: Query<(Entity, &mut Track, &mut Handle<ColorMaterial>)>,
 ) {
     for (entity, mut track, mut material_handle) in tracks.iter_mut() {
-        track.concentration *= config::TRACK_CONCENTRAION_FACTOR.powf(time.delta_seconds());
+        track.concentration *= config::TRACK_CONCENTRAION_FACTOR.powf(FIXED_DELTA_TIME);
         track.concentration = track.concentration.max(0.0);
         if track.concentration < 0.001 {
             commands.entity(entity).despawn();

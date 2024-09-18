@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use rand::prelude::*;
 
 use crate::{
     ant::spawn_ant,
     assets::{Colors, Meshes},
-    config::{LAYER_NEST, NEST_RADIUS},
+    config::{FIXED_DELTA_TIME, LAYER_NEST, NEST_RADIUS},
 };
 
 #[derive(Component)]
@@ -40,14 +42,15 @@ pub fn spawn_nest(
 
 pub fn spawn_ants_from_nest(
     mut commands: Commands,
-    time: Res<Time>,
     meshes: Res<Meshes>,
     colors: Res<Colors>,
     mut query: Query<(&mut Nest, &Transform, &mut AntSpawner)>,
 ) {
     let mut rng = rand::thread_rng();
     for (mut nest, transform, mut spawner) in query.iter_mut() {
-        spawner.timer.tick(time.delta());
+        spawner
+            .timer
+            .tick(Duration::from_secs_f32(FIXED_DELTA_TIME));
         if !spawner.timer.finished() {
             continue;
         }

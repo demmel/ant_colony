@@ -32,3 +32,7 @@ pub const TRACK_RADIUS: f32 = 2.0;
 pub const TRACK_CONCENTRAION_FACTOR: f32 = 0.99;
 
 pub const NEST_RADIUS: f32 = 10.0;
+
+pub const TICKS_PER_SECOND: f64 = 60.0;
+pub const FIXED_DELTA_TIME: f32 = 1.0 / TICKS_PER_SECOND as f32;
+pub const TICK_RATE_MULTIPLIER: f64 = 4.0;

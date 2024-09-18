@@ -153,16 +153,15 @@ pub fn spawn_ant(
         .id()
 }
 
-pub fn decay_satiation(time: Res<Time>, mut satiations: Query<&mut Satiation>) {
+pub fn decay_satiation(mut satiations: Query<&mut Satiation>) {
     for mut satiation in satiations.iter_mut() {
-        satiation.remove(ANT_ENERGY_LOSS_RATE * time.delta_seconds());
+        satiation.remove(ANT_ENERGY_LOSS_RATE * FIXED_DELTA_TIME);
     }
 }
 
-pub fn eat_held_food(time: Res<Time>, mut eaters: Query<(&mut HeldFood, &mut Satiation)>) {
+pub fn eat_held_food(mut eaters: Query<(&mut HeldFood, &mut Satiation)>) {
     for (mut held_food, mut satiation) in eaters.iter_mut() {
-        let eats =
-            held_food.remove((ANT_MAX_ENERGY - satiation.amount()) * 0.1 * time.delta_seconds());
+        let eats = held_food.remove((ANT_MAX_ENERGY - satiation.amount()) * 0.1 * FIXED_DELTA_TIME);
         satiation.add(eats);
     }
 }
@@ -175,12 +174,12 @@ pub fn starve(mut commands: Commands, satiations: Query<(Entity, &Satiation)>) {
     }
 }
 
-pub fn walk_ants(time: Res<Time>, mut ants: Query<&mut Transform, With<Ant>>) {
+pub fn walk_ants(mut ants: Query<&mut Transform, With<Ant>>) {
     let min_distance_from_edge = ANT_SEGMENT_RADIUS * 2.0 * 1.5;
 
     for mut transform in ants.iter_mut() {
         let forward = transform.up();
-        transform.translation += forward * ANT_SPEED * time.delta_seconds();
+        transform.translation += forward * ANT_SPEED * FIXED_DELTA_TIME;
 
         if transform.translation.x < -WORLD_WIDTH / 2.0 + min_distance_from_edge {
             transform.translation.x = -WORLD_WIDTH / 2.0 + min_distance_from_edge;
@@ -197,7 +196,6 @@ pub fn walk_ants(time: Res<Time>, mut ants: Query<&mut Transform, With<Ant>>) {
 }
 
 pub fn rotate_ants(
-    time: Res<Time>,
     track_position_index: Res<TrackPositionIndex>,
     mut ants: Query<(&mut Transform, &HeldFood), With<Ant>>,
     tracks: Query<&Track>,
@@ -308,7 +306,7 @@ pub fn rotate_ants(
             rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI)
         };
 
-        let max_turn = ANT_ROTATION_SPEED * time.delta_seconds();
+        let max_turn = ANT_ROTATION_SPEED * FIXED_DELTA_TIME;
         let angle = angle.clamp(-max_turn, max_turn);
 
         ant_transform.rotation *= Quat::from_rotation_z(angle);
@@ -317,7 +315,6 @@ pub fn rotate_ants(
 
 pub fn emit_pheromones(
     mut commands: Commands,
-    time: Res<Time>,
     meshes: Res<Meshes>,
     colors: Res<Colors>,
     track_position_index: Res<TrackPositionIndex>,
@@ -345,7 +342,7 @@ pub fn emit_pheromones(
 
         if let Some((_, id)) = nearest_track {
             let (mut track, _) = tracks.get_mut(*id).unwrap();
-            track.concentration += ANT_TRACK_CONCENTRATION * time.delta_seconds();
+            track.concentration += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
             track.concentration = track.concentration.min(1.0);
         } else {
             spawn_track(
@@ -353,7 +350,7 @@ pub fn emit_pheromones(
                 &meshes,
                 &colors,
                 ant_transform.translation.xy(),
-                ANT_TRACK_CONCENTRATION * time.delta_seconds(),
+                ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME,
                 if !held_food.empty() {
                     TrackKind::Food
                 } else {
