@@ -309,7 +309,9 @@ pub fn rotate_ants(
         let max_turn = ANT_ROTATION_SPEED * FIXED_DELTA_TIME;
         let angle = angle.clamp(-max_turn, max_turn);
 
-        ant_transform.rotation *= Quat::from_rotation_z(angle);
+        // We need to normalize the rotation quaternion because it can drift over time due to floating point errors
+        ant_transform.rotation =
+            (Quat::from_rotation_z(angle) * ant_transform.rotation).normalize();
     }
 }
 
@@ -425,14 +427,12 @@ pub fn deposit_food(
 
 pub fn update_ant_holding_food(
     held_food_query: Query<(&HeldFood, &Children), Changed<HeldFood>>,
-    mut carried_food_query: Query<(Entity, &CarriedFood, &mut Visibility, &mut Transform)>,
+    mut carried_food_query: Query<(Entity, &CarriedFood, &mut Visibility)>,
 ) {
     for (held_food, children) in held_food_query.iter() {
         for child in children.iter() {
-            if let Ok((_, _, mut visibility, mut transform)) = carried_food_query.get_mut(*child) {
+            if let Ok((_, _, mut visibility)) = carried_food_query.get_mut(*child) {
                 *visibility = if !held_food.empty() {
-                    transform.scale =
-                        Vec3::splat((held_food.amount() / std::f32::consts::PI).sqrt());
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
