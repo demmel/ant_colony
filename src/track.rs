@@ -60,7 +60,7 @@ pub fn decay_tracks(
     for (entity, mut track, mut material_handle) in tracks.iter_mut() {
         track.concentration *= config::TRACK_CONCENTRAION_FACTOR.powf(time.delta_seconds());
         track.concentration = track.concentration.max(0.0);
-        if track.concentration < 0.01 {
+        if track.concentration < 0.001 {
             commands.entity(entity).despawn();
             continue;
         }

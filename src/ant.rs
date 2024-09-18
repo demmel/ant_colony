@@ -1,10 +1,10 @@
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy::{math::NormedVectorSpace, prelude::*, sprite::MaterialMesh2dBundle};
 use rand::prelude::*;
 
 use crate::{
     assets::{Colors, Meshes},
     config::*,
-    food::{spawn_food, Food},
+    food::{spawn_random_food, Food},
     nest::Nest,
     position_index::TrackPositionIndex,
     track::{spawn_track, Track, TrackKind},
@@ -151,7 +151,7 @@ pub fn spawn_ant(
 
 pub fn decay_satiation(time: Res<Time>, mut satiations: Query<&mut Satiation>) {
     for mut satiation in satiations.iter_mut() {
-        satiation.remove(0.01 * time.delta_seconds());
+        satiation.remove(ANT_ENERGY_LOSS_RATE * time.delta_seconds());
     }
 }
 
@@ -217,14 +217,16 @@ pub fn rotate_ants(
                 let sense_offset = ant_transform.rotation.mul_vec3(*sense_offset).xy();
                 let sense_center = ant_transform.translation.xy() + sense_offset;
 
-                let sensed_tracks = track_position_index.within(sense_center, ANT_SENSE_RADIUS);
+                let sensed_tracks =
+                    track_position_index.within(sense_center, ANT_SENSE_RADIUS + TRACK_RADIUS);
 
-                let sensed_food = food.iter().find(|(_, _, food_transform)| {
-                    food_transform.translation.xy().distance(sense_center) < ANT_SENSE_RADIUS
+                let sensed_food = food.iter().find(|(_, food, food_transform)| {
+                    food_transform.translation.xy().distance(sense_center)
+                        < ANT_SENSE_RADIUS + food.radius()
                 });
 
-                let sensed_nest =
-                    nest_transform.translation.xy().distance(sense_center) < ANT_SENSE_RADIUS;
+                let sensed_nest = nest_transform.translation.xy().distance(sense_center)
+                    < ANT_SENSE_RADIUS + NEST_RADIUS;
 
                 let weight = if !held_food.empty() && sensed_nest {
                     10.0f32
@@ -259,16 +261,38 @@ pub fn rotate_ants(
             .sum::<Vec2>()
             .normalize();
 
-        if ant_transform.translation.x < -WORLD_WIDTH / 2.0 + ANT_SENSE_RADIUS {
-            direction += Vec2::new(10.0, 0.0);
-        } else if ant_transform.translation.x > WORLD_WIDTH / 2.0 - ANT_SENSE_RADIUS {
-            direction += Vec2::new(-10.0, 0.0);
+        let min_distance_fron_edge = 10.0;
+        let soft_min_distance_from_edge = 50.0;
+        let distance = ant_transform.translation.x.distance(WORLD_WIDTH / 2.0);
+        if distance < soft_min_distance_from_edge {
+            direction.x -= 2.0
+                * (1.0
+                    - (distance - min_distance_fron_edge)
+                        / (soft_min_distance_from_edge - min_distance_fron_edge));
         }
 
-        if ant_transform.translation.y < -WORLD_HEIGHT / 2.0 + ANT_SENSE_RADIUS {
-            direction += Vec2::new(0.0, 10.0);
-        } else if ant_transform.translation.y > WORLD_HEIGHT / 2.0 - ANT_SENSE_RADIUS {
-            direction += Vec2::new(0.0, -10.0);
+        let distance = ant_transform.translation.x.distance(-WORLD_WIDTH / 2.0);
+        if distance < soft_min_distance_from_edge {
+            direction.x += 2.0
+                * (1.0
+                    - (distance - min_distance_fron_edge)
+                        / (soft_min_distance_from_edge - min_distance_fron_edge));
+        }
+
+        let distance = ant_transform.translation.y.distance(WORLD_HEIGHT / 2.0);
+        if distance < soft_min_distance_from_edge {
+            direction.y -= 2.0
+                * (1.0
+                    - (distance - min_distance_fron_edge)
+                        / (soft_min_distance_from_edge - min_distance_fron_edge));
+        }
+
+        let distance = ant_transform.translation.y.distance(-WORLD_HEIGHT / 2.0);
+        if distance < soft_min_distance_from_edge {
+            direction.y += 2.0
+                * (1.0
+                    - (distance - min_distance_fron_edge)
+                        / (soft_min_distance_from_edge - min_distance_fron_edge));
         }
 
         let angle = if direction != Vec2::ZERO {
@@ -297,7 +321,7 @@ pub fn emit_pheromones(
 ) {
     for (ant_transform, held_food) in ants.iter() {
         let nearby_tracks =
-            track_position_index.within(ant_transform.translation.xy(), ANT_SENSE_RADIUS);
+            track_position_index.within(ant_transform.translation.xy(), TRACK_RADIUS * 2.0);
 
         let nearest_track = nearby_tracks.clone().find(|(distance, id)| {
             let (track, _) = tracks.get(**id).unwrap();
@@ -342,8 +366,6 @@ pub fn pick_up_food(
     mut ants: Query<(&Transform, &mut HeldFood), With<Ant>>,
     mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
 ) {
-    let mut rng = rand::thread_rng();
-
     for (ant_transform, mut held_food) in ants.iter_mut() {
         if !held_food.empty() {
             continue;
@@ -362,20 +384,13 @@ pub fn pick_up_food(
                 .translation
                 .xy()
                 .distance(ant_transform.translation.xy())
-                < ANT_SEGMENT_RADIUS
+                < ANT_SEGMENT_RADIUS * 1.5 + food.radius()
             {
-                let took = held_food.add(food.amount);
-                food.amount -= took;
-                if food.amount <= 0.0 {
+                let took = held_food.add(food.amount());
+                food.remove(took);
+                if food.empty() {
                     commands.entity(entity).despawn();
-                    spawn_food(
-                        &mut commands,
-                        &meshes,
-                        &colors,
-                        rng.gen_range(-WORLD_WIDTH / 2.0..WORLD_WIDTH / 2.0),
-                        rng.gen_range(-WORLD_HEIGHT / 2.0..WORLD_HEIGHT / 2.0),
-                        rng.gen_range(10.0..100.0),
-                    );
+                    spawn_random_food(&mut commands, &meshes, &colors);
                 }
             }
         }
@@ -383,14 +398,9 @@ pub fn pick_up_food(
 }
 
 pub fn deposit_food(
-    mut commands: Commands,
-    meshes: Res<Meshes>,
-    colors: Res<Colors>,
     mut ants: Query<(&Transform, &mut HeldFood), With<Ant>>,
     mut nests: Query<(&mut Nest, &Transform), Without<Ant>>,
 ) {
-    let mut rng: ThreadRng = rand::thread_rng();
-
     let (mut nest, nest_transform) = nests.single_mut();
 
     for (ant_transform, mut held_food) in ants.iter_mut() {
@@ -403,21 +413,10 @@ pub fn deposit_food(
             .xy()
             .distance(nest_transform.translation.xy());
 
-        if nest_distance < 10.0 {
+        if nest_distance < ANT_SEGMENT_RADIUS * 1.5 + NEST_RADIUS {
             let amount = held_food.amount();
             nest.food += amount;
             held_food.remove(amount);
-            if nest.food >= 1.0 {
-                spawn_ant(
-                    &mut commands,
-                    &meshes,
-                    &colors,
-                    ant_transform.translation.x,
-                    ant_transform.translation.y,
-                    rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI),
-                );
-                nest.food -= 1.0;
-            }
         }
     }
 }

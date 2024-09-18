@@ -19,8 +19,8 @@ use bevy::{
     window::WindowMode::BorderlessFullscreen,
 };
 use config::LAYER_DIRT;
-use food::{spawn_food, update_food_size};
-use nest::spawn_nest;
+use food::{spawn_random_food, update_food_size};
+use nest::{spawn_ants_from_nest, spawn_nest};
 use position_index::{compute_track_position_index, TrackPositionIndex};
 use rand::prelude::*;
 use track::decay_tracks;
@@ -55,7 +55,12 @@ fn main() {
                     (
                         walk_ants,
                         (deposit_food, pick_up_food, emit_pheromones),
-                        (rotate_ants, update_ant_holding_food, update_food_size),
+                        (
+                            rotate_ants,
+                            update_ant_holding_food,
+                            update_food_size,
+                            spawn_ants_from_nest,
+                        ),
                     )
                         .chain(),
                 )
@@ -103,11 +108,8 @@ fn setup(mut commands: Commands, meshes: Res<Meshes>, colors: Res<Colors>) {
         spawn_ant(&mut commands, &meshes, &colors, x, y, rotation);
     }
 
-    for _ in 0..100 {
-        let x = rng.gen_range(-config::WORLD_WIDTH / 2.0..config::WORLD_WIDTH / 2.0);
-        let y = rng.gen_range(-config::WORLD_HEIGHT / 2.0..config::WORLD_HEIGHT / 2.0);
-        let amount = rng.gen_range(50.0..250.0);
-        spawn_food(&mut commands, &meshes, &colors, x, y, amount);
+    for _ in 0..25 {
+        spawn_random_food(&mut commands, &meshes, &colors);
     }
 
     spawn_nest(&mut commands, &meshes, &colors, 0.0, 0.0);
