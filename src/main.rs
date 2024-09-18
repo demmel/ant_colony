@@ -45,29 +45,22 @@ fn main() {
         .init_resource::<TrackPositionIndex>()
         .add_systems(Startup, setup)
         .add_systems(
-            Update,
-            (
+            FixedUpdate,
+            ((
                 (
-                    (
-                        (decay_tracks, compute_track_position_index).chain(),
-                        ((decay_satiation, eat_held_food), starve).chain(),
-                    ),
-                    (
-                        walk_ants,
-                        (deposit_food, pick_up_food, emit_pheromones),
-                        (
-                            rotate_ants,
-                            update_ant_holding_food,
-                            update_food_size,
-                            spawn_ants_from_nest,
-                        ),
-                    )
-                        .chain(),
+                    (decay_tracks, compute_track_position_index).chain(),
+                    ((decay_satiation, eat_held_food), starve).chain(),
+                ),
+                (
+                    walk_ants,
+                    (deposit_food, pick_up_food, emit_pheromones),
+                    (rotate_ants, spawn_ants_from_nest),
                 )
                     .chain(),
-                exit,
-            ),
+            )
+                .chain(),),
         )
+        .add_systems(Update, (update_ant_holding_food, update_food_size, exit))
         .run();
 }
 
