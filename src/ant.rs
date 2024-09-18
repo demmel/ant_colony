@@ -22,10 +22,10 @@ impl Satiation {
     }
 
     pub fn add(&mut self, amount: f32) -> f32 {
-        let added = (1.0 - self.0).min(amount);
+        let added = (ANT_MAX_ENERGY - self.0).min(amount);
         self.0 += added;
-        if (1.0 - self.0) < 0.0001 {
-            self.0 = 1.0;
+        if (ANT_MAX_ENERGY - self.0) < 0.0001 {
+            self.0 = ANT_MAX_ENERGY;
         }
         added
     }
@@ -52,15 +52,19 @@ impl HeldFood {
         self.0 <= 0.0
     }
 
+    pub fn full(&self) -> bool {
+        self.0 >= ANT_MAX_CARRY
+    }
+
     pub fn amount(&self) -> f32 {
         self.0
     }
 
     pub fn add(&mut self, amount: f32) -> f32 {
-        let added = (1.0 - self.0).min(amount);
+        let added = (ANT_MAX_CARRY - self.0).min(amount);
         self.0 += added;
-        if (1.0 - self.0) < 0.0001 {
-            self.0 = 1.0;
+        if (ANT_MAX_CARRY - self.0) < 0.0001 {
+            self.0 = ANT_MAX_CARRY;
         }
         added
     }
@@ -157,7 +161,8 @@ pub fn decay_satiation(time: Res<Time>, mut satiations: Query<&mut Satiation>) {
 
 pub fn eat_held_food(time: Res<Time>, mut eaters: Query<(&mut HeldFood, &mut Satiation)>) {
     for (mut held_food, mut satiation) in eaters.iter_mut() {
-        let eats = held_food.remove((1.0 - satiation.amount()) * 0.1 * time.delta_seconds());
+        let eats =
+            held_food.remove((ANT_MAX_ENERGY - satiation.amount()) * 0.1 * time.delta_seconds());
         satiation.add(eats);
     }
 }
@@ -367,7 +372,7 @@ pub fn pick_up_food(
     mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
 ) {
     for (ant_transform, mut held_food) in ants.iter_mut() {
-        if !held_food.empty() {
+        if held_food.full() {
             continue;
         }
 
@@ -423,12 +428,14 @@ pub fn deposit_food(
 
 pub fn update_ant_holding_food(
     held_food_query: Query<(&HeldFood, &Children), Changed<HeldFood>>,
-    mut carried_food_query: Query<(Entity, &CarriedFood, &mut Visibility)>,
+    mut carried_food_query: Query<(Entity, &CarriedFood, &mut Visibility, &mut Transform)>,
 ) {
     for (held_food, children) in held_food_query.iter() {
         for child in children.iter() {
-            if let Ok((_, _, mut visibility)) = carried_food_query.get_mut(*child) {
+            if let Ok((_, _, mut visibility, mut transform)) = carried_food_query.get_mut(*child) {
                 *visibility = if !held_food.empty() {
+                    transform.scale =
+                        Vec3::splat((held_food.amount() / std::f32::consts::PI).sqrt());
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
