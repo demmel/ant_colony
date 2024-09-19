@@ -2,8 +2,6 @@ use bevy::prelude::*;
 
 pub const CLEAR_COLOR: Color = Color::srgb(0.0, 0.0, 0.0);
 pub const DIRT_COLOR: Color = Color::srgb(155.0 / 255.0, 118.0 / 255.0, 83.0 / 255.0);
-pub const NEST_TRACK_COLOR: Color = Color::srgb(1.0, 0.0, 0.0);
-pub const FOOD_TRACK_COLOR: Color = Color::srgb(0.0, 1.0, 0.0);
 pub const ANT_COLOR: Color = Color::srgb(0.0, 0.0, 0.0);
 pub const NEST_COLOR: Color = Color::srgb(120.0 / 255.0, 82.0 / 255.0, 30.0 / 255.0);
 pub const FOOD_COLOR: Color = Color::srgb(126.0 / 255.0, 196.0 / 255.0, 51.0 / 255.0);

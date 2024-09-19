@@ -3,7 +3,6 @@ mod assets;
 mod config;
 mod food;
 mod nest;
-mod position_index;
 mod track;
 
 use ant::{
@@ -21,9 +20,8 @@ use bevy::{
 use config::{LAYER_DIRT, TICKS_PER_SECOND, TICK_RATE_MULTIPLIER};
 use food::{spawn_random_food, update_food_size};
 use nest::{spawn_ants_from_nest, spawn_nest};
-use position_index::{compute_track_position_index, TrackPositionIndex};
 use rand::prelude::*;
-use track::decay_tracks;
+use track::{decay_tracks, setup_tracks, update_tracks_image};
 
 fn main() {
     App::new()
@@ -45,13 +43,12 @@ fn main() {
         ))
         .init_resource::<Meshes>()
         .init_resource::<Colors>()
-        .init_resource::<TrackPositionIndex>()
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, setup_tracks))
         .add_systems(
             FixedUpdate,
             ((
                 (
-                    (decay_tracks, compute_track_position_index).chain(),
+                    decay_tracks,
                     ((decay_satiation, eat_held_food), starve).chain(),
                 ),
                 (
@@ -63,7 +60,15 @@ fn main() {
             )
                 .chain(),),
         )
-        .add_systems(Update, (update_ant_holding_food, update_food_size, exit))
+        .add_systems(
+            Update,
+            (
+                update_ant_holding_food,
+                update_food_size,
+                update_tracks_image,
+                exit,
+            ),
+        )
         .run();
 }
 

@@ -1,8 +1,8 @@
 use bevy::{prelude::*, sprite::Mesh2dHandle};
 
 use crate::config::{
-    ANT_ANTENNA_RADIUS, ANT_COLOR, ANT_SEGMENT_RADIUS, DIRT_COLOR, FOOD_COLOR, FOOD_TRACK_COLOR,
-    NEST_COLOR, NEST_TRACK_COLOR, TRACK_RADIUS, WORLD_HEIGHT, WORLD_WIDTH,
+    ANT_ANTENNA_RADIUS, ANT_COLOR, ANT_SEGMENT_RADIUS, DIRT_COLOR, FOOD_COLOR, NEST_COLOR,
+    WORLD_HEIGHT, WORLD_WIDTH,
 };
 
 #[derive(Resource)]
@@ -12,7 +12,6 @@ pub struct Meshes {
     pub ant_antenna: Mesh2dHandle,
     pub ant_segment: Mesh2dHandle,
     pub dirt: Mesh2dHandle,
-    pub track: Mesh2dHandle,
 }
 
 impl FromWorld for Meshes {
@@ -28,9 +27,6 @@ impl FromWorld for Meshes {
                 radius: ANT_SEGMENT_RADIUS,
             })),
             dirt: Mesh2dHandle(meshes.add(Rectangle::new(WORLD_WIDTH, WORLD_HEIGHT))),
-            track: Mesh2dHandle(meshes.add(Circle {
-                radius: TRACK_RADIUS,
-            })),
         }
     }
 }
@@ -41,8 +37,6 @@ pub struct Colors {
     pub dirt: Handle<ColorMaterial>,
     pub food: Handle<ColorMaterial>,
     pub nest: Handle<ColorMaterial>,
-    pub nest_tracks: Vec<Handle<ColorMaterial>>,
-    pub food_tracks: Vec<Handle<ColorMaterial>>,
 }
 
 impl FromWorld for Colors {
@@ -53,12 +47,6 @@ impl FromWorld for Colors {
             dirt: colors.add(DIRT_COLOR),
             nest: colors.add(NEST_COLOR),
             food: colors.add(FOOD_COLOR),
-            nest_tracks: (0..=100)
-                .map(|a| colors.add(NEST_TRACK_COLOR.with_alpha(0.5 * a as f32 / 100.0)))
-                .collect(),
-            food_tracks: (0..=100)
-                .map(|a| colors.add(FOOD_TRACK_COLOR.with_alpha(0.5 * a as f32 / 100.0)))
-                .collect(),
         }
     }
 }

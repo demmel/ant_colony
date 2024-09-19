@@ -6,8 +6,7 @@ use crate::{
     config::*,
     food::{spawn_random_food, Food},
     nest::Nest,
-    position_index::TrackPositionIndex,
-    track::{spawn_track, Track, TrackKind},
+    track::Tracks,
 };
 
 #[derive(Component)]
@@ -196,14 +195,14 @@ pub fn walk_ants(mut ants: Query<&mut Transform, With<Ant>>) {
 }
 
 pub fn rotate_ants(
-    track_position_index: Res<TrackPositionIndex>,
     mut ants: Query<(&mut Transform, &HeldFood), With<Ant>>,
-    tracks: Query<&Track>,
+    tracks: Query<&Tracks>,
     food: Query<(Entity, &Food, &Transform), Without<Ant>>,
     nests: Query<&Transform, (With<Nest>, Without<Ant>)>,
 ) {
     let mut rng = rand::thread_rng();
     let nest_transform = nests.single();
+    let tracks = tracks.single();
 
     let sense_offsets = [
         Vec3::Y * ANT_SENSE_DISTANCE,
@@ -219,9 +218,6 @@ pub fn rotate_ants(
             .map(|sense_offset| {
                 let sense_offset = ant_transform.rotation.mul_vec3(*sense_offset).xy();
                 let sense_center = ant_transform.translation.xy() + sense_offset;
-
-                let sensed_tracks =
-                    track_position_index.within(sense_center, ANT_SENSE_RADIUS + TRACK_RADIUS);
 
                 let sensed_food = food.iter().find(|(_, food, food_transform)| {
                     food_transform.translation.xy().distance(sense_center)
@@ -242,21 +238,19 @@ pub fn rotate_ants(
                         10.0
                     }
                 } else {
-                    rng.gen_range(0.0..0.1)
-                        + sensed_tracks
-                            .map(|(_, id)| {
-                                let track = tracks.get(*id).unwrap();
-
-                                let multiplier = match (&track.kind, !held_food.empty()) {
-                                    (TrackKind::Nest, false) => 0.0,
-                                    (TrackKind::Nest, true) => 1.0,
-                                    (TrackKind::Food, false) => 1.0,
-                                    (TrackKind::Food, true) => 0.0,
-                                };
-
-                                track.concentration * multiplier
-                            })
-                            .sum::<f32>()
+                    rng.gen_range(0.0..0.05)
+                        + 0.95
+                            * tracks
+                                .within_circle(sense_center, ANT_SENSE_RADIUS)
+                                .map(|(_, _, track)| {
+                                    if held_food.empty() {
+                                        track.food
+                                    } else {
+                                        track.nest
+                                    }
+                                })
+                                .sum::<f32>()
+                            / ((ANT_SENSE_RADIUS * ANT_SENSE_RADIUS) * std::f32::consts::PI)
                 };
 
                 weight.max(0.01) * (sense_center - ant_transform.translation.xy())
@@ -316,50 +310,24 @@ pub fn rotate_ants(
 }
 
 pub fn emit_pheromones(
-    mut commands: Commands,
-    meshes: Res<Meshes>,
-    colors: Res<Colors>,
-    track_position_index: Res<TrackPositionIndex>,
     ants: Query<(&Transform, &HeldFood), With<Ant>>,
-    mut tracks: Query<(&mut Track, &Transform), Without<Ant>>,
+    mut tracks: Query<&mut Tracks>,
 ) {
+    let mut tracks = tracks.single_mut();
     for (ant_transform, held_food) in ants.iter() {
-        let nearby_tracks =
-            track_position_index.within(ant_transform.translation.xy(), TRACK_RADIUS * 2.0);
-
-        let nearest_track = nearby_tracks.clone().find(|(distance, id)| {
-            let (track, _) = tracks.get(**id).unwrap();
-            match (&track.kind, !held_food.empty()) {
-                (TrackKind::Nest, false) => {}
-                (TrackKind::Nest, true) => {
-                    return false;
-                }
-                (TrackKind::Food, false) => {
-                    return false;
-                }
-                (TrackKind::Food, true) => {}
-            };
-            *distance < TRACK_RADIUS * 2.0
-        });
-
-        if let Some((_, id)) = nearest_track {
-            let (mut track, _) = tracks.get_mut(*id).unwrap();
-            track.concentration += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
-            track.concentration = track.concentration.min(1.0);
-        } else {
-            spawn_track(
-                &mut commands,
-                &meshes,
-                &colors,
-                ant_transform.translation.xy(),
-                ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME,
+        tracks.within_circle_mut(
+            ant_transform.translation.xy(),
+            TRACK_RADIUS,
+            |_, _, track| {
                 if !held_food.empty() {
-                    TrackKind::Food
+                    track.food += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
+                    track.food = track.food.min(1.0);
                 } else {
-                    TrackKind::Nest
-                },
-            );
-        }
+                    track.nest += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
+                    track.nest = track.nest.min(1.0);
+                }
+            },
+        );
     }
 }
 
