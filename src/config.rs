@@ -14,9 +14,9 @@ pub const ANT_SEGMENT_RADIUS: f32 = 2.0;
 pub const ANT_SPEED: f32 = 10.0;
 pub const ANT_ROTATION_SPEED: f32 = 2.0 * std::f32::consts::PI;
 pub const ANT_TRACK_CONCENTRATION: f32 = 0.1;
-pub const ANT_SENSE_RADIUS: f32 = 5.0;
-pub const ANT_SENSE_DISTANCE: f32 = 10.0;
-pub const ANT_ENERGY_LOSS_RATE: f32 = 0.01;
+pub const ANT_SENSE_RADIUS: f32 = 8.0;
+pub const ANT_SENSE_DISTANCE: f32 = 12.0;
+pub const ANT_ENERGY_LOSS_RATE: f32 = 0.005;
 pub const ANT_MAX_ENERGY: f32 = 1.0;
 pub const ANT_MAX_CARRY: f32 = 5.0;
 
@@ -28,6 +28,8 @@ pub const LAYER_ANT: f32 = 4.0;
 
 pub const TRACK_RADIUS: f32 = 2.0;
 pub const TRACK_CONCENTRAION_FACTOR: f32 = 0.99;
+pub const TRACK_DIFFUSION_FACTOR: f32 = 0.001;
+pub const TRACK_RESOLUTION: f32 = 4.0;
 
 pub const NEST_RADIUS: f32 = 10.0;
 

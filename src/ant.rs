@@ -13,6 +13,12 @@ use crate::{
 pub struct Ant;
 
 #[derive(Component)]
+pub enum AntKind {
+    Scout,
+    Worker,
+}
+
+#[derive(Component)]
 pub struct Satiation(f32);
 
 impl Satiation {
@@ -88,7 +94,12 @@ pub fn spawn_ant(
     x: f32,
     y: f32,
     rotation: f32,
+    kind: AntKind,
 ) -> Entity {
+    let color = match kind {
+        AntKind::Scout => colors.ant_scout.clone(),
+        AntKind::Worker => colors.ant_worker.clone(),
+    };
     commands
         .spawn((
             Ant,
@@ -98,6 +109,7 @@ pub fn spawn_ant(
                 Transform::from_translation(Vec3::new(x, y, LAYER_ANT))
                     .mul_transform(Transform::from_rotation(Quat::from_rotation_z(rotation))),
             ),
+            kind,
         ))
         .with_children(|parent| {
             let head_y = 3.0 * ANT_SEGMENT_RADIUS / 2.0;
@@ -106,31 +118,31 @@ pub fn spawn_ant(
 
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_segment.clone(),
-                material: colors.ant.clone(),
+                material: color.clone(),
                 transform: Transform::from_translation(Vec3::new(0.0, head_y, 0.0)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_segment.clone(),
-                material: colors.ant.clone(),
+                material: color.clone(),
                 transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_segment.clone(),
-                material: colors.ant.clone(),
+                material: color.clone(),
                 transform: Transform::from_translation(Vec3::new(0.0, -head_y, 0.0)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_antenna.clone(),
-                material: colors.ant.clone(),
+                material: color.clone(),
                 transform: Transform::from_translation(Vec3::new(antenna_x, antenna_y, 0.0)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_antenna.clone(),
-                material: colors.ant.clone(),
+                material: color.clone(),
                 transform: Transform::from_translation(Vec3::new(-antenna_x, antenna_y, 0.0)),
                 ..Default::default()
             });
@@ -194,11 +206,18 @@ pub fn walk_ants(mut ants: Query<&mut Transform, With<Ant>>) {
     }
 }
 
+enum AntGoal {
+    Scout,
+    Food,
+    Nest,
+}
+
 pub fn rotate_ants(
-    mut ants: Query<(&mut Transform, &HeldFood), With<Ant>>,
+    mut ants: Query<(&mut Transform, &Satiation, &HeldFood, &AntKind), With<Ant>>,
     tracks: Query<&Tracks>,
     food: Query<(Entity, &Food, &Transform), Without<Ant>>,
     nests: Query<&Transform, (With<Nest>, Without<Ant>)>,
+    mut gizmos: Gizmos,
 ) {
     let mut rng = rand::thread_rng();
     let nest_transform = nests.single();
@@ -206,12 +225,29 @@ pub fn rotate_ants(
 
     let sense_offsets = [
         Vec3::Y * ANT_SENSE_DISTANCE,
-        Quat::from_rotation_z(std::f32::consts::PI / 8.0).mul_vec3(Vec3::Y) * ANT_SENSE_DISTANCE,
-        Quat::from_rotation_z(-std::f32::consts::PI / 8.0).mul_vec3(Vec3::Y) * ANT_SENSE_DISTANCE,
+        Quat::from_rotation_z(3.0 * std::f32::consts::PI / 16.0).mul_vec3(Vec3::Y)
+            * ANT_SENSE_DISTANCE,
+        Quat::from_rotation_z(-3.0 * std::f32::consts::PI / 16.0).mul_vec3(Vec3::Y)
+            * ANT_SENSE_DISTANCE,
     ];
 
-    for (mut ant_transform, held_food) in ants.iter_mut() {
+    for (mut ant_transform, satiation, held_food, ant_kind) in ants.iter_mut() {
         let forward = ant_transform.up();
+
+        let goal = if satiation.amount() < ANT_MAX_ENERGY * 0.5 {
+            AntGoal::Nest
+        } else {
+            match ant_kind {
+                AntKind::Scout => AntGoal::Scout,
+                AntKind::Worker => {
+                    if held_food.empty() {
+                        AntGoal::Food
+                    } else {
+                        AntGoal::Nest
+                    }
+                }
+            }
+        };
 
         let mut direction: Vec2 = sense_offsets
             .iter()
@@ -219,41 +255,45 @@ pub fn rotate_ants(
                 let sense_offset = ant_transform.rotation.mul_vec3(*sense_offset).xy();
                 let sense_center = ant_transform.translation.xy() + sense_offset;
 
-                let sensed_food = food.iter().find(|(_, food, food_transform)| {
-                    food_transform.translation.xy().distance(sense_center)
-                        < ANT_SENSE_RADIUS + food.radius()
-                });
+                // gizmos.circle_2d(sense_center, ANT_SENSE_RADIUS, WHITE);
 
-                let sensed_nest = nest_transform.translation.xy().distance(sense_center)
-                    < ANT_SENSE_RADIUS + NEST_RADIUS;
-
-                let weight = if !held_food.empty() && sensed_nest {
-                    10.0f32
-                } else if held_food.empty() && sensed_nest {
-                    0.0
-                } else if let Some((_, _, _)) = sensed_food {
-                    if !held_food.empty() {
-                        0.0
-                    } else {
-                        10.0
-                    }
-                } else {
-                    rng.gen_range(0.0..0.05)
-                        + 0.95
-                            * tracks
+                let weight = match goal {
+                    AntGoal::Food => {
+                        let sensed_food = food.iter().find(|(_, food, food_transform)| {
+                            food_transform.translation.xy().distance(sense_center)
+                                < ANT_SENSE_RADIUS + food.radius()
+                        });
+                        if sensed_food.is_some() {
+                            10.0
+                        } else {
+                            tracks
                                 .within_circle(sense_center, ANT_SENSE_RADIUS)
-                                .map(|(_, _, track)| {
-                                    if held_food.empty() {
-                                        track.food
-                                    } else {
-                                        track.nest
-                                    }
-                                })
+                                .map(|track| track.food)
                                 .sum::<f32>()
-                            / ((ANT_SENSE_RADIUS * ANT_SENSE_RADIUS) * std::f32::consts::PI)
+                        }
+                    }
+                    AntGoal::Nest => {
+                        let sensed_nest = nest_transform.translation.xy().distance(sense_center)
+                            < ANT_SENSE_RADIUS + NEST_RADIUS;
+                        if sensed_nest {
+                            10.0
+                        } else {
+                            tracks
+                                .within_circle(sense_center, ANT_SENSE_RADIUS)
+                                .map(|track| track.nest)
+                                .sum::<f32>()
+                        }
+                    }
+                    AntGoal::Scout => {
+                        // Scout ants are attracted to low pheromone concentrations
+                        1.0 - tracks
+                            .within_circle(sense_center, ANT_SENSE_RADIUS)
+                            .map(|track| track.food.max(track.nest))
+                            .sum::<f32>()
+                    }
                 };
 
-                weight.max(0.01) * (sense_center - ant_transform.translation.xy())
+                weight.max(0.000001) * (sense_center - ant_transform.translation.xy())
             })
             .sum::<Vec2>()
             .normalize();
@@ -295,7 +335,10 @@ pub fn rotate_ants(
         let angle = if direction != Vec2::ZERO {
             direction = direction.normalize();
             let angle = forward.xy().angle_between(direction);
-            angle + rng.gen_range(-std::f32::consts::PI / 8.0..std::f32::consts::PI / 8.0)
+            angle
+                + rng.gen_range(
+                    -3.0 * std::f32::consts::PI / 16.0..3.0 * std::f32::consts::PI / 16.0,
+                )
         } else {
             rng.gen_range(-std::f32::consts::PI..std::f32::consts::PI)
         };
@@ -315,19 +358,15 @@ pub fn emit_pheromones(
 ) {
     let mut tracks = tracks.single_mut();
     for (ant_transform, held_food) in ants.iter() {
-        tracks.within_circle_mut(
-            ant_transform.translation.xy(),
-            TRACK_RADIUS,
-            |_, _, track| {
-                if !held_food.empty() {
-                    track.food += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
-                    track.food = track.food.min(1.0);
-                } else {
-                    track.nest += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
-                    track.nest = track.nest.min(1.0);
-                }
-            },
-        );
+        tracks.within_circle_mut(ant_transform.translation.xy(), TRACK_RADIUS, |track| {
+            if !held_food.empty() {
+                track.food += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
+                track.food = track.food.min(1.0);
+            } else {
+                track.nest += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
+                track.nest = track.nest.min(1.0);
+            }
+        });
     }
 }
 
@@ -389,6 +428,25 @@ pub fn deposit_food(
             let amount = held_food.amount();
             nest.food += amount;
             held_food.remove(amount);
+        }
+    }
+}
+
+pub fn eat_nest_food(
+    mut nests: Query<(&mut Nest, &Transform)>,
+    mut satiations: Query<(&mut Satiation, &Transform)>,
+) {
+    for (mut nest, nest_transform) in nests.iter_mut() {
+        for (mut satiation, satiation_transform) in satiations.iter_mut() {
+            let distance = satiation_transform
+                .translation
+                .xy()
+                .distance(nest_transform.translation.xy());
+            if distance < ANT_SEGMENT_RADIUS * 1.5 + NEST_RADIUS {
+                let eats = nest.food.min(ANT_MAX_ENERGY - satiation.amount());
+                nest.food -= eats;
+                satiation.add(eats);
+            }
         }
     }
 }

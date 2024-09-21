@@ -33,7 +33,8 @@ impl FromWorld for Meshes {
 
 #[derive(Resource)]
 pub struct Colors {
-    pub ant: Handle<ColorMaterial>,
+    pub ant_worker: Handle<ColorMaterial>,
+    pub ant_scout: Handle<ColorMaterial>,
     pub dirt: Handle<ColorMaterial>,
     pub food: Handle<ColorMaterial>,
     pub nest: Handle<ColorMaterial>,
@@ -43,7 +44,8 @@ impl FromWorld for Colors {
     fn from_world(world: &mut World) -> Self {
         let mut colors = world.resource_mut::<Assets<ColorMaterial>>();
         Self {
-            ant: colors.add(ANT_COLOR),
+            ant_worker: colors.add(ANT_COLOR),
+            ant_scout: colors.add(Color::srgb(0.0, 0.3, 0.0)),
             dirt: colors.add(DIRT_COLOR),
             nest: colors.add(NEST_COLOR),
             food: colors.add(FOOD_COLOR),
