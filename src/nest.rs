@@ -4,9 +4,9 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use rand::prelude::*;
 
 use crate::{
-    ant::{self, spawn_ant, AntKind},
+    ant::{spawn_ant, AntKind},
     assets::{Colors, Meshes},
-    config::{FIXED_DELTA_TIME, LAYER_NEST, NEST_RADIUS},
+    config::{SimulationConfig, FIXED_DELTA_TIME, LAYER_NEST, NEST_RADIUS},
 };
 
 #[derive(Component)]
@@ -42,6 +42,7 @@ pub fn spawn_nest(
 
 pub fn spawn_ants_from_nest(
     mut commands: Commands,
+    simulation_config: Res<SimulationConfig>,
     meshes: Res<Meshes>,
     colors: Res<Colors>,
     mut query: Query<(&mut Nest, &Transform, &mut AntSpawner)>,
@@ -63,6 +64,7 @@ pub fn spawn_ants_from_nest(
         let rotation = rng.gen_range(0.0..std::f32::consts::PI * 2.0);
         spawn_ant(
             &mut commands,
+            &simulation_config,
             &meshes,
             &colors,
             x,

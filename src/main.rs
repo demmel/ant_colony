@@ -17,7 +17,7 @@ use bevy::{
     sprite::MaterialMesh2dBundle,
     window::WindowMode::BorderlessFullscreen,
 };
-use config::{LAYER_DIRT, TICKS_PER_SECOND, TICK_RATE_MULTIPLIER};
+use config::{SimulationConfig, LAYER_DIRT, TICKS_PER_SECOND, TICK_RATE_MULTIPLIER};
 use food::{spawn_random_food, update_food_size};
 use nest::{spawn_ants_from_nest, spawn_nest};
 use rand::prelude::*;
@@ -43,6 +43,7 @@ fn main() {
         ))
         .init_resource::<Meshes>()
         .init_resource::<Colors>()
+        .init_resource::<SimulationConfig>()
         .add_systems(Startup, (setup, setup_tracks))
         .add_systems(
             FixedUpdate,
@@ -75,7 +76,12 @@ fn main() {
 #[derive(Component)]
 struct MainCamera;
 
-fn setup(mut commands: Commands, meshes: Res<Meshes>, colors: Res<Colors>) {
+fn setup(
+    mut commands: Commands,
+    simulation_config: Res<SimulationConfig>,
+    meshes: Res<Meshes>,
+    colors: Res<Colors>,
+) {
     let mut rng = rand::thread_rng();
 
     commands.spawn((
@@ -108,6 +114,7 @@ fn setup(mut commands: Commands, meshes: Res<Meshes>, colors: Res<Colors>) {
         let rotation = rng.gen_range(0.0..std::f32::consts::PI * 2.0);
         spawn_ant(
             &mut commands,
+            &simulation_config,
             &meshes,
             &colors,
             x,
@@ -121,7 +128,7 @@ fn setup(mut commands: Commands, meshes: Res<Meshes>, colors: Res<Colors>) {
         );
     }
 
-    for _ in 0..5 {
+    for _ in 0..25 {
         spawn_random_food(&mut commands, &meshes, &colors);
     }
 

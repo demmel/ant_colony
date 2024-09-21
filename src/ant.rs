@@ -50,35 +50,38 @@ impl Satiation {
 }
 
 #[derive(Component)]
-pub struct HeldFood(f32);
+pub struct HeldFood {
+    amount: f32,
+    max: f32,
+}
 
 impl HeldFood {
     pub fn empty(&self) -> bool {
-        self.0 <= 0.0
+        self.amount <= 0.0
     }
 
     pub fn full(&self) -> bool {
-        self.0 >= ANT_MAX_CARRY
+        self.amount >= self.max
     }
 
     pub fn amount(&self) -> f32 {
-        self.0
+        self.amount
     }
 
     pub fn add(&mut self, amount: f32) -> f32 {
-        let added = (ANT_MAX_CARRY - self.0).min(amount);
-        self.0 += added;
-        if (ANT_MAX_CARRY - self.0) < 0.0001 {
-            self.0 = ANT_MAX_CARRY;
+        let added = (self.max - self.amount).min(amount);
+        self.amount += added;
+        if (self.max - self.amount) < 0.0001 {
+            self.amount = self.max;
         }
         added
     }
 
     pub fn remove(&mut self, amount: f32) -> f32 {
-        let removed = self.0.min(amount);
-        self.0 -= removed;
-        if self.0 < 0.0001 {
-            self.0 = 0.0;
+        let removed = self.amount.min(amount);
+        self.amount -= removed;
+        if self.amount < 0.0001 {
+            self.amount = 0.0;
         }
         removed
     }
@@ -89,6 +92,7 @@ pub struct CarriedFood;
 
 pub fn spawn_ant(
     commands: &mut Commands,
+    simulation_config: &Res<SimulationConfig>,
     meshes: &Res<Meshes>,
     colors: &Res<Colors>,
     x: f32,
@@ -104,7 +108,10 @@ pub fn spawn_ant(
         .spawn((
             Ant,
             Satiation(1.0),
-            HeldFood(0.0),
+            HeldFood {
+                amount: 0.0,
+                max: simulation_config.ant_max_carry,
+            },
             SpatialBundle::from_transform(
                 Transform::from_translation(Vec3::new(x, y, LAYER_ANT))
                     .mul_transform(Transform::from_rotation(Quat::from_rotation_z(rotation))),
@@ -213,6 +220,7 @@ enum AntGoal {
 }
 
 pub fn rotate_ants(
+    simulation_config: Res<SimulationConfig>,
     mut ants: Query<(&mut Transform, &Satiation, &HeldFood, &AntKind), With<Ant>>,
     tracks: Query<&Tracks>,
     food: Query<(Entity, &Food, &Transform), Without<Ant>>,
@@ -222,13 +230,15 @@ pub fn rotate_ants(
     let mut rng = rand::thread_rng();
     let nest_transform = nests.single();
     let tracks = tracks.single();
+    let ant_sense_distance = simulation_config.ant_sense_distance;
+    let ant_sense_radius = simulation_config.ant_sense_radius;
 
     let sense_offsets = [
-        Vec3::Y * ANT_SENSE_DISTANCE,
+        Vec3::Y * ant_sense_distance,
         Quat::from_rotation_z(3.0 * std::f32::consts::PI / 16.0).mul_vec3(Vec3::Y)
-            * ANT_SENSE_DISTANCE,
+            * ant_sense_distance,
         Quat::from_rotation_z(-3.0 * std::f32::consts::PI / 16.0).mul_vec3(Vec3::Y)
-            * ANT_SENSE_DISTANCE,
+            * ant_sense_distance,
     ];
 
     for (mut ant_transform, satiation, held_food, ant_kind) in ants.iter_mut() {
@@ -261,25 +271,25 @@ pub fn rotate_ants(
                     AntGoal::Food => {
                         let sensed_food = food.iter().find(|(_, food, food_transform)| {
                             food_transform.translation.xy().distance(sense_center)
-                                < ANT_SENSE_RADIUS + food.radius()
+                                < ant_sense_radius + food.radius()
                         });
                         if sensed_food.is_some() {
                             10.0
                         } else {
                             tracks
-                                .within_circle(sense_center, ANT_SENSE_RADIUS)
+                                .within_circle(sense_center, ant_sense_radius)
                                 .map(|track| track.food)
                                 .sum::<f32>()
                         }
                     }
                     AntGoal::Nest => {
                         let sensed_nest = nest_transform.translation.xy().distance(sense_center)
-                            < ANT_SENSE_RADIUS + NEST_RADIUS;
+                            < ant_sense_radius + NEST_RADIUS;
                         if sensed_nest {
                             10.0
                         } else {
                             tracks
-                                .within_circle(sense_center, ANT_SENSE_RADIUS)
+                                .within_circle(sense_center, ant_sense_radius)
                                 .map(|track| track.nest)
                                 .sum::<f32>()
                         }
@@ -287,7 +297,7 @@ pub fn rotate_ants(
                     AntGoal::Scout => {
                         // Scout ants are attracted to low pheromone concentrations
                         1.0 - tracks
-                            .within_circle(sense_center, ANT_SENSE_RADIUS)
+                            .within_circle(sense_center, ant_sense_radius)
                             .map(|track| track.food.max(track.nest))
                             .sum::<f32>()
                     }
@@ -353,6 +363,7 @@ pub fn rotate_ants(
 }
 
 pub fn emit_pheromones(
+    simulation_config: Res<SimulationConfig>,
     ants: Query<(&Transform, &HeldFood), With<Ant>>,
     mut tracks: Query<&mut Tracks>,
 ) {
@@ -360,10 +371,10 @@ pub fn emit_pheromones(
     for (ant_transform, held_food) in ants.iter() {
         tracks.within_circle_mut(ant_transform.translation.xy(), TRACK_RADIUS, |track| {
             if !held_food.empty() {
-                track.food += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
+                track.food += simulation_config.ant_track_concentration * FIXED_DELTA_TIME;
                 track.food = track.food.min(1.0);
             } else {
-                track.nest += ANT_TRACK_CONCENTRATION * FIXED_DELTA_TIME;
+                track.nest += simulation_config.ant_track_concentration * FIXED_DELTA_TIME;
                 track.nest = track.nest.min(1.0);
             }
         });
@@ -382,27 +393,20 @@ pub fn pick_up_food(
             continue;
         }
 
-        let nearby_food = food.iter_mut().find(|(_, _, transform)| {
+        let nearby_food = food.iter_mut().find(|(_, food, transform)| {
             transform
                 .translation
                 .xy()
                 .distance(ant_transform.translation.xy())
-                < ANT_SENSE_RADIUS
+                < ANT_SEGMENT_RADIUS * 1.5 + food.radius()
         });
 
-        if let Some((entity, mut food, food_transform)) = nearby_food {
-            if food_transform
-                .translation
-                .xy()
-                .distance(ant_transform.translation.xy())
-                < ANT_SEGMENT_RADIUS * 1.5 + food.radius()
-            {
-                let took = held_food.add(food.amount());
-                food.remove(took);
-                if food.empty() {
-                    commands.entity(entity).despawn();
-                    spawn_random_food(&mut commands, &meshes, &colors);
-                }
+        if let Some((entity, mut food, _)) = nearby_food {
+            let took = held_food.add(food.amount());
+            food.remove(took);
+            if food.empty() {
+                commands.entity(entity).despawn();
+                spawn_random_food(&mut commands, &meshes, &colors);
             }
         }
     }

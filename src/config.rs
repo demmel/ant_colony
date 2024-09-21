@@ -13,12 +13,8 @@ pub const ANT_ANTENNA_RADIUS: f32 = 1.0;
 pub const ANT_SEGMENT_RADIUS: f32 = 2.0;
 pub const ANT_SPEED: f32 = 10.0;
 pub const ANT_ROTATION_SPEED: f32 = 2.0 * std::f32::consts::PI;
-pub const ANT_TRACK_CONCENTRATION: f32 = 0.1;
-pub const ANT_SENSE_RADIUS: f32 = 8.0;
-pub const ANT_SENSE_DISTANCE: f32 = 12.0;
-pub const ANT_ENERGY_LOSS_RATE: f32 = 0.005;
+pub const ANT_ENERGY_LOSS_RATE: f32 = 0.006;
 pub const ANT_MAX_ENERGY: f32 = 1.0;
-pub const ANT_MAX_CARRY: f32 = 5.0;
 
 pub const LAYER_DIRT: f32 = 0.0;
 pub const LAYER_TRACK: f32 = 1.0;
@@ -27,8 +23,6 @@ pub const LAYER_FOOD: f32 = 3.0;
 pub const LAYER_ANT: f32 = 4.0;
 
 pub const TRACK_RADIUS: f32 = 2.0;
-pub const TRACK_CONCENTRAION_FACTOR: f32 = 0.99;
-pub const TRACK_DIFFUSION_FACTOR: f32 = 0.001;
 pub const TRACK_RESOLUTION: f32 = 4.0;
 
 pub const NEST_RADIUS: f32 = 10.0;
@@ -36,3 +30,26 @@ pub const NEST_RADIUS: f32 = 10.0;
 pub const TICKS_PER_SECOND: f64 = 60.0;
 pub const FIXED_DELTA_TIME: f32 = 1.0 / TICKS_PER_SECOND as f32;
 pub const TICK_RATE_MULTIPLIER: f64 = 4.0;
+
+#[derive(Resource)]
+pub struct SimulationConfig {
+    pub ant_track_concentration: f32,
+    pub ant_sense_distance: f32,
+    pub ant_sense_radius: f32,
+    pub ant_max_carry: f32,
+    pub track_concentration_factor: f32,
+    pub track_diffusion_factor: f32,
+}
+
+impl Default for SimulationConfig {
+    fn default() -> Self {
+        Self {
+            ant_track_concentration: 0.1,
+            ant_sense_distance: 12.0,
+            ant_sense_radius: 8.0,
+            ant_max_carry: 5.0,
+            track_concentration_factor: 0.99,
+            track_diffusion_factor: 0.001,
+        }
+    }
+}

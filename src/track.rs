@@ -7,8 +7,7 @@ use bevy::{
 };
 
 use crate::config::{
-    FIXED_DELTA_TIME, LAYER_TRACK, TRACK_CONCENTRAION_FACTOR, TRACK_DIFFUSION_FACTOR,
-    TRACK_RESOLUTION, WORLD_HEIGHT, WORLD_WIDTH,
+    SimulationConfig, FIXED_DELTA_TIME, LAYER_TRACK, TRACK_RESOLUTION, WORLD_HEIGHT, WORLD_WIDTH,
 };
 
 pub struct Track {
@@ -38,15 +37,6 @@ impl Tracks {
 
     pub fn height(&self) -> usize {
         (WORLD_HEIGHT / TRACK_RESOLUTION) as usize
-    }
-
-    pub fn get(&self, x: usize, y: usize) -> &Track {
-        &self.0[x + y * self.width() as usize]
-    }
-
-    pub fn get_mut(&mut self, x: usize, y: usize) -> &mut Track {
-        let width = self.width();
-        &mut self.0[x + y * width as usize]
     }
 }
 
@@ -110,16 +100,20 @@ pub fn setup_tracks(mut commands: Commands, mut textures: ResMut<Assets<Image>>)
     ));
 }
 
-pub fn decay_tracks(mut tracks: Query<&mut Tracks>) {
+pub fn decay_tracks(simulation_config: Res<SimulationConfig>, mut tracks: Query<&mut Tracks>) {
     let mut tracks = tracks.single_mut();
 
     for track in tracks.0.iter_mut() {
-        track.food *= TRACK_CONCENTRAION_FACTOR.powf(FIXED_DELTA_TIME);
-        track.nest *= TRACK_CONCENTRAION_FACTOR.powf(FIXED_DELTA_TIME);
+        track.food *= simulation_config
+            .track_concentration_factor
+            .powf(FIXED_DELTA_TIME);
+        track.nest *= simulation_config
+            .track_concentration_factor
+            .powf(FIXED_DELTA_TIME);
     }
 }
 
-pub fn diffuse_tracks(mut tracks: Query<&mut Tracks>) {
+pub fn diffuse_tracks(simulation_config: Res<SimulationConfig>, mut tracks: Query<&mut Tracks>) {
     let mut tracks = tracks.single_mut();
 
     for x in 1..tracks.width() as usize - 1 {
@@ -127,14 +121,14 @@ pub fn diffuse_tracks(mut tracks: Query<&mut Tracks>) {
             let i = x + y * tracks.width() as usize;
             let track = &tracks.0[i];
 
-            let mut food = track.food * (1.0 - 4.0 * TRACK_DIFFUSION_FACTOR);
-            let mut nest = track.nest * (1.0 - 4.0 * TRACK_DIFFUSION_FACTOR);
+            let mut food = track.food * (1.0 - 4.0 * simulation_config.track_diffusion_factor);
+            let mut nest = track.nest * (1.0 - 4.0 * simulation_config.track_diffusion_factor);
 
             for (dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
                 let neighbor = &tracks.0[(x as isize + dx) as usize
                     + (y as isize + dy) as usize * tracks.width() as usize];
-                food += neighbor.food * TRACK_DIFFUSION_FACTOR;
-                nest += neighbor.nest * TRACK_DIFFUSION_FACTOR;
+                food += neighbor.food * simulation_config.track_diffusion_factor;
+                nest += neighbor.nest * simulation_config.track_diffusion_factor;
             }
             tracks.0[i] = Track { food, nest };
         }
