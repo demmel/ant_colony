@@ -4,9 +4,10 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use rand::prelude::*;
 
 use crate::{
-    ant::{spawn_ant, AntKind},
+    ant::spawn_ant,
     assets::{Colors, Meshes},
     config::{SimulationConfig, FIXED_DELTA_TIME, LAYER_NEST, NEST_RADIUS},
+    track::Tracks,
 };
 
 #[derive(Component)]
@@ -70,11 +71,21 @@ pub fn spawn_ants_from_nest(
             x,
             y,
             rotation,
-            match rng.gen_range(0..100) {
-                0..50 => AntKind::Scout,
-                50..100 => AntKind::Worker,
-                _ => unreachable!(),
-            },
+            simulation_config.ant_kind_gen_config.gen_kind(&mut rng),
         );
+    }
+}
+
+pub fn emit_nest_pheromones(
+    simulation_config: Res<SimulationConfig>,
+    mut query: Query<&Transform, With<Nest>>,
+    mut tracks: Query<&mut Tracks>,
+) {
+    let mut tracks = tracks.single_mut();
+    for transform in query.iter_mut() {
+        let nest_concentration = simulation_config.nest_track_concentration;
+        tracks.within_circle_mut(transform.translation.xy(), NEST_RADIUS, |track| {
+            track.nest += nest_concentration * FIXED_DELTA_TIME;
+        });
     }
 }

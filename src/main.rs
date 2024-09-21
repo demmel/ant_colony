@@ -6,7 +6,7 @@ mod nest;
 mod track;
 
 use ant::{
-    decay_satiation, deposit_food, eat_held_food, eat_nest_food, emit_pheromones, pick_up_food,
+    decay_satiation, deposit_food, eat_held_food, eat_nest_food, emit_ant_pheromones, pick_up_food,
     rotate_ants, spawn_ant, starve, update_ant_holding_food, walk_ants,
 };
 use assets::{Colors, Meshes};
@@ -19,7 +19,7 @@ use bevy::{
 };
 use config::{SimulationConfig, LAYER_DIRT, TICKS_PER_SECOND, TICK_RATE_MULTIPLIER};
 use food::{spawn_random_food, update_food_size};
-use nest::{spawn_ants_from_nest, spawn_nest};
+use nest::{emit_nest_pheromones, spawn_ants_from_nest, spawn_nest};
 use rand::prelude::*;
 use track::{decay_tracks, diffuse_tracks, setup_tracks, update_tracks_image};
 
@@ -49,12 +49,17 @@ fn main() {
             FixedUpdate,
             ((
                 (
-                    (decay_tracks, diffuse_tracks).chain(),
+                    (decay_tracks, diffuse_tracks, emit_nest_pheromones).chain(),
                     ((decay_satiation, eat_held_food), starve).chain(),
                 ),
                 (
                     walk_ants,
-                    (deposit_food, pick_up_food, emit_pheromones, eat_nest_food),
+                    (
+                        deposit_food,
+                        pick_up_food,
+                        emit_ant_pheromones,
+                        eat_nest_food,
+                    ),
                     (rotate_ants, spawn_ants_from_nest),
                 )
                     .chain(),
@@ -120,11 +125,7 @@ fn setup(
             x,
             y,
             rotation,
-            match rng.gen_range(0..100) {
-                0..50 => ant::AntKind::Scout,
-                50..100 => ant::AntKind::Worker,
-                _ => unreachable!(),
-            },
+            simulation_config.ant_kind_gen_config.gen_kind(&mut rng),
         );
     }
 

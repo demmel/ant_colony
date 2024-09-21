@@ -1,4 +1,8 @@
 use bevy::prelude::*;
+use enum_ordinalize::Ordinalize;
+use rand::prelude::*;
+
+use crate::ant::AntKind;
 
 pub const CLEAR_COLOR: Color = Color::srgb(0.0, 0.0, 0.0);
 pub const DIRT_COLOR: Color = Color::srgb(155.0 / 255.0, 118.0 / 255.0, 83.0 / 255.0);
@@ -37,8 +41,10 @@ pub struct SimulationConfig {
     pub ant_sense_distance: f32,
     pub ant_sense_radius: f32,
     pub ant_max_carry: f32,
+    pub nest_track_concentration: f32,
     pub track_concentration_factor: f32,
     pub track_diffusion_factor: f32,
+    pub ant_kind_gen_config: AntKindGenConfig,
 }
 
 impl Default for SimulationConfig {
@@ -48,8 +54,42 @@ impl Default for SimulationConfig {
             ant_sense_distance: 12.0,
             ant_sense_radius: 8.0,
             ant_max_carry: 5.0,
+            nest_track_concentration: 0.1,
             track_concentration_factor: 0.99,
             track_diffusion_factor: 0.001,
+            ant_kind_gen_config: AntKindGenConfig::new([
+                (AntKind::Worker, 1.0),
+                (AntKind::Scout, 1.0),
+            ]),
         }
+    }
+}
+
+pub struct AntKindGenConfig {
+    weights: [(AntKind, f32); AntKind::VARIANT_COUNT],
+}
+
+impl AntKindGenConfig {
+    pub fn new(weights: [(AntKind, f32); AntKind::VARIANT_COUNT]) -> Self {
+        let mut seen = [false; AntKind::VARIANT_COUNT];
+        for (kind, _) in weights.iter() {
+            assert!(
+                !seen[kind.ordinal() as usize],
+                "duplicate ant kind in gen config"
+            );
+            seen[kind.ordinal() as usize] = true;
+        }
+        assert!(
+            seen.iter().all(|&seen| seen),
+            "missing ant kind in gen config"
+        );
+        Self { weights }
+    }
+
+    pub fn gen_kind(&self, rng: &mut impl Rng) -> AntKind {
+        self.weights
+            .choose_weighted(rng, |(_, weight)| *weight)
+            .unwrap()
+            .0
     }
 }

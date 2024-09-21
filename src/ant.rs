@@ -1,4 +1,5 @@
 use bevy::{math::NormedVectorSpace, prelude::*, sprite::MaterialMesh2dBundle};
+use enum_ordinalize::Ordinalize;
 use rand::prelude::*;
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
 #[derive(Component)]
 pub struct Ant;
 
-#[derive(Component)]
+#[derive(Component, Ordinalize, Clone, Copy)]
 pub enum AntKind {
     Scout,
     Worker,
@@ -362,7 +363,7 @@ pub fn rotate_ants(
     }
 }
 
-pub fn emit_pheromones(
+pub fn emit_ant_pheromones(
     simulation_config: Res<SimulationConfig>,
     ants: Query<(&Transform, &HeldFood), With<Ant>>,
     mut tracks: Query<&mut Tracks>,

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.14.2" }
+enum-ordinalize = "4.3.0"
 kdtree = "0.7.0"
 rand = "0.8.5"
 
