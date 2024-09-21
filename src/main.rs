@@ -24,6 +24,10 @@ use rand::prelude::*;
 use track::{decay_tracks, diffuse_tracks, setup_tracks, update_tracks_image};
 
 fn main() {
+    run_simulation(SimulationConfig::default());
+}
+
+fn run_simulation(simulation_config: SimulationConfig) {
     App::new()
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
@@ -43,7 +47,7 @@ fn main() {
         ))
         .init_resource::<Meshes>()
         .init_resource::<Colors>()
-        .init_resource::<SimulationConfig>()
+        .insert_resource(simulation_config)
         .add_systems(Startup, (setup, setup_tracks))
         .add_systems(
             FixedUpdate,
