@@ -11,7 +11,9 @@ use ant::{
 };
 use assets::{Colors, Meshes};
 use bevy::{
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    diagnostic::{DiagnosticsPlugin, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    ecs::schedule::ScheduleLabel,
+    log::LogPlugin,
     prelude::*,
     render::camera::ScalingMode,
     sprite::MaterialMesh2dBundle,
@@ -43,53 +45,52 @@ fn run_simulation(simulation_config: SimulationConfig) {
 fn create_base_app(simulation_config: SimulationConfig) -> App {
     let mut app = App::new();
 
-    app.insert_resource(simulation_config)
-        .add_systems(Startup, (setup, setup_tracks))
-        .add_systems(
-            FixedUpdate,
-            ((
+    app.add_plugins((FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin::default()))
+        .insert_resource(simulation_config)
+        .add_systems(Startup, (setup, setup_tracks));
+    app
+}
+
+fn add_simulation(mut app: App, label: impl ScheduleLabel) -> App {
+    app.add_systems(
+        label,
+        ((
+            (
+                (decay_tracks, diffuse_tracks, emit_nest_pheromones).chain(),
+                ((decay_satiation, eat_held_food), starve).chain(),
+            ),
+            (
+                walk_ants,
                 (
-                    (decay_tracks, diffuse_tracks, emit_nest_pheromones).chain(),
-                    ((decay_satiation, eat_held_food), starve).chain(),
+                    deposit_food,
+                    pick_up_food,
+                    emit_ant_pheromones,
+                    eat_nest_food,
                 ),
-                (
-                    walk_ants,
-                    (
-                        deposit_food,
-                        pick_up_food,
-                        emit_ant_pheromones,
-                        eat_nest_food,
-                    ),
-                    (rotate_ants, spawn_ants_from_nest),
-                )
-                    .chain(),
+                (rotate_ants, spawn_ants_from_nest),
             )
-                .chain(),),
-        );
+                .chain(),
+        )
+            .chain(),),
+    );
     app
 }
 
 fn augment_headless(mut app: App) -> App {
-    app.add_plugins(MinimalPlugins)
-        .insert_resource(Time::<Fixed>::from_hz(
-            TICKS_PER_SECOND * TICK_RATE_MULTIPLIER,
-        ));
+    app.add_plugins((MinimalPlugins, LogPlugin::default(), DiagnosticsPlugin));
+    app = add_simulation(app, Update);
     app
 }
 
 fn augment_rendering(mut app: App) -> App {
-    app.add_plugins((
-        DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Ant Colony".into(),
-                mode: BorderlessFullscreen,
-                ..default()
-            }),
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Ant Colony".into(),
+            mode: BorderlessFullscreen,
             ..default()
         }),
-        LogDiagnosticsPlugin::default(),
-        FrameTimeDiagnosticsPlugin,
-    ))
+        ..default()
+    }))
     .insert_resource(ClearColor(config::CLEAR_COLOR))
     .insert_resource(Time::<Fixed>::from_hz(
         TICKS_PER_SECOND * TICK_RATE_MULTIPLIER,
@@ -108,6 +109,7 @@ fn augment_rendering(mut app: App) -> App {
             exit,
         ),
     );
+    app = add_simulation(app, FixedUpdate);
     app
 }
 
