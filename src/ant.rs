@@ -94,17 +94,11 @@ pub struct CarriedFood;
 pub fn spawn_ant(
     commands: &mut Commands,
     simulation_config: &Res<SimulationConfig>,
-    meshes: &Res<Meshes>,
-    colors: &Res<Colors>,
     x: f32,
     y: f32,
     rotation: f32,
     kind: AntKind,
 ) -> Entity {
-    let color = match kind {
-        AntKind::Scout => colors.ant_scout.clone(),
-        AntKind::Worker => colors.ant_worker.clone(),
-    };
     commands
         .spawn((
             Ant,
@@ -114,12 +108,26 @@ pub fn spawn_ant(
                 max: simulation_config.ant_max_carry,
             },
             SpatialBundle::from_transform(
-                Transform::from_translation(Vec3::new(x, y, LAYER_ANT))
+                Transform::from_translation(Vec3::new(x, y, 0.0))
                     .mul_transform(Transform::from_rotation(Quat::from_rotation_z(rotation))),
             ),
             kind,
         ))
-        .with_children(|parent| {
+        .id()
+}
+
+pub fn setup_ant_rendering(
+    mut commands: Commands,
+    meshes: Res<Meshes>,
+    colors: Res<Colors>,
+    new_ants: Query<(Entity, &AntKind), Added<Ant>>,
+) {
+    for (entity, kind) in new_ants.iter() {
+        let color = match kind {
+            AntKind::Scout => colors.ant_scout.clone(),
+            AntKind::Worker => colors.ant_worker.clone(),
+        };
+        commands.entity(entity).with_children(|parent| {
             let head_y = 3.0 * ANT_SEGMENT_RADIUS / 2.0;
             let antenna_y = head_y + ANT_SEGMENT_RADIUS;
             let antenna_x = ANT_SEGMENT_RADIUS;
@@ -127,31 +135,31 @@ pub fn spawn_ant(
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_segment.clone(),
                 material: color.clone(),
-                transform: Transform::from_translation(Vec3::new(0.0, head_y, 0.0)),
+                transform: Transform::from_translation(Vec3::new(0.0, head_y, LAYER_ANT)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_segment.clone(),
                 material: color.clone(),
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, LAYER_ANT)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_segment.clone(),
                 material: color.clone(),
-                transform: Transform::from_translation(Vec3::new(0.0, -head_y, 0.0)),
+                transform: Transform::from_translation(Vec3::new(0.0, -head_y, LAYER_ANT)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_antenna.clone(),
                 material: color.clone(),
-                transform: Transform::from_translation(Vec3::new(antenna_x, antenna_y, 0.0)),
+                transform: Transform::from_translation(Vec3::new(antenna_x, antenna_y, LAYER_ANT)),
                 ..Default::default()
             });
             parent.spawn(MaterialMesh2dBundle {
                 mesh: meshes.ant_antenna.clone(),
                 material: color.clone(),
-                transform: Transform::from_translation(Vec3::new(-antenna_x, antenna_y, 0.0)),
+                transform: Transform::from_translation(Vec3::new(-antenna_x, antenna_y, LAYER_ANT)),
                 ..Default::default()
             });
             parent.spawn((
@@ -162,14 +170,14 @@ pub fn spawn_ant(
                     transform: Transform::from_translation(Vec3::new(
                         0.0,
                         head_y + ANT_SEGMENT_RADIUS,
-                        0.1,
+                        LAYER_ANT + 0.1,
                     )),
                     visibility: Visibility::Hidden,
                     ..Default::default()
                 },
             ));
-        })
-        .id()
+        });
+    }
 }
 
 pub fn decay_satiation(mut satiations: Query<&mut Satiation>) {
@@ -226,7 +234,6 @@ pub fn rotate_ants(
     tracks: Query<&Tracks>,
     food: Query<(Entity, &Food, &Transform), Without<Ant>>,
     nests: Query<&Transform, (With<Nest>, Without<Ant>)>,
-    mut gizmos: Gizmos,
 ) {
     let mut rng = rand::thread_rng();
     let nest_transform = nests.single();
@@ -384,8 +391,6 @@ pub fn emit_ant_pheromones(
 
 pub fn pick_up_food(
     mut commands: Commands,
-    meshes: Res<Meshes>,
-    colors: Res<Colors>,
     mut ants: Query<(&Transform, &mut HeldFood), With<Ant>>,
     mut food: Query<(Entity, &mut Food, &Transform), Without<Ant>>,
 ) {
@@ -407,7 +412,7 @@ pub fn pick_up_food(
             food.remove(took);
             if food.empty() {
                 commands.entity(entity).despawn();
-                spawn_random_food(&mut commands, &meshes, &colors);
+                spawn_random_food(&mut commands);
             }
         }
     }

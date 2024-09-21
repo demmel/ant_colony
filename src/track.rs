@@ -76,28 +76,35 @@ impl Default for Tracks {
     }
 }
 
-pub fn setup_tracks(mut commands: Commands, mut textures: ResMut<Assets<Image>>) {
-    let image = Image::new_fill(
-        Extent3d {
-            width: (WORLD_WIDTH / TRACK_RESOLUTION) as u32,
-            height: (WORLD_HEIGHT / TRACK_RESOLUTION) as u32,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        &[0, 0, 0, 128],
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::all(),
-    );
-    let texture = textures.add(image);
-    commands.spawn((
-        Tracks::default(),
-        SpriteBundle {
+pub fn setup_tracks(mut commands: Commands) {
+    commands.spawn((Tracks::default(),));
+}
+
+pub fn setup_tracks_renderin(
+    mut commands: Commands,
+    mut textures: ResMut<Assets<Image>>,
+    tracks: Query<Entity, Added<Tracks>>,
+) {
+    for tracks in tracks.iter() {
+        let image = Image::new_fill(
+            Extent3d {
+                width: (WORLD_WIDTH / TRACK_RESOLUTION) as u32,
+                height: (WORLD_HEIGHT / TRACK_RESOLUTION) as u32,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[0, 0, 0, 0],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::all(),
+        );
+        let texture = textures.add(image);
+        commands.entity(tracks).insert(SpriteBundle {
             texture,
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, LAYER_TRACK))
                 .with_scale(Vec3::new(TRACK_RESOLUTION, TRACK_RESOLUTION, 1.0)),
             ..default()
-        },
-    ));
+        });
+    }
 }
 
 pub fn decay_tracks(simulation_config: Res<SimulationConfig>, mut tracks: Query<&mut Tracks>) {

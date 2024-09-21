@@ -20,32 +20,37 @@ pub struct AntSpawner {
     pub timer: Timer,
 }
 
-pub fn spawn_nest(
-    commands: &mut Commands,
-    meshes: &Res<Meshes>,
-    colors: &Res<Colors>,
-    x: f32,
-    y: f32,
-) {
+pub fn spawn_nest(commands: &mut Commands, x: f32, y: f32) {
     commands.spawn((
         Nest { food: 5.0 },
-        MaterialMesh2dBundle {
-            mesh: meshes.nest.clone(),
-            material: colors.nest.clone(),
-            transform: Transform::from_translation(Vec3::new(x, y, LAYER_NEST)),
-            ..Default::default()
-        },
         AntSpawner {
             timer: Timer::from_seconds(60.0, TimerMode::Repeating),
         },
+        SpatialBundle::from_transform(Transform::from_translation(Vec3::new(x, y, 0.0))),
     ));
+}
+
+pub fn setup_nest_rendering(
+    mut commands: Commands,
+    meshes: Res<Meshes>,
+    colors: Res<Colors>,
+    nests: Query<Entity, Added<Nest>>,
+) {
+    for nest in nests.iter() {
+        commands.entity(nest).with_children(|parent| {
+            parent.spawn(MaterialMesh2dBundle {
+                mesh: meshes.nest.clone(),
+                material: colors.nest.clone(),
+                transform: Transform::from_translation(Vec3::Z * LAYER_NEST),
+                ..Default::default()
+            });
+        });
+    }
 }
 
 pub fn spawn_ants_from_nest(
     mut commands: Commands,
     simulation_config: Res<SimulationConfig>,
-    meshes: Res<Meshes>,
-    colors: Res<Colors>,
     mut query: Query<(&mut Nest, &Transform, &mut AntSpawner)>,
 ) {
     let mut rng = rand::thread_rng();
@@ -66,8 +71,6 @@ pub fn spawn_ants_from_nest(
         spawn_ant(
             &mut commands,
             &simulation_config,
-            &meshes,
-            &colors,
             x,
             y,
             rotation,
