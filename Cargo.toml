@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.14.2" }
+bevy = { version = "0.14.2", default-features = false, features = [
+    "bevy_sprite",
+] }
 enum-ordinalize = "4.3.0"
-kdtree = "0.7.0"
 rand = "0.8.5"
 
 [profile.dev]
@@ -16,6 +17,7 @@ opt-level = 1
 opt-level = 3
 
 [profile.release]
+debug = true
 codegen-units = 1
 lto = "thin"
 
